@@ -1,11 +1,15 @@
 @echo off
-copy *.* "E:\Archivos-Personales\GoogleDrive\Codigo Propio\HTML\PlantCare\"
-copy *.* "E:\Archivos-Personales\OneDrive\Archivos Privados\Codigo Propio\HTML\PlantCare\"
 
 echo.
 echo ==================================================
 echo    Subiendo cambios a GitHub...
-echo ==================================================
+echo.
+
+@copy *.* "E:\Archivos-Personales\GoogleDrive\Codigo Propio\HTML\PlantCare\"
+@copy *.* "E:\Archivos-Personales\OneDrive\Archivos Privados\Codigo Propio\HTML\PlantCare\"
+
+echo.
+echo    Subiendo cambios a GitHub...
 echo.
 git add index.html
 git add GEMINI-plant_identifier_app.html
@@ -18,7 +22,6 @@ REM Sube los cambios a la rama principal de tu repositorio en GitHub.
 git push origin HEAD
 
 echo.
-echo ==================================================
 echo      PROCESO DE PUBLICACION FINALIZADO
 echo ==================================================
 echo.
