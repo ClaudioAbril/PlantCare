@@ -15,7 +15,7 @@ git add backup.bat
 
 git commit -m "Deploy automatico: Actualizacion de la app PlantCare"
 REM Sube los cambios a la rama principal de tu repositorio en GitHub.
-git push origin main
+git push origin HEAD
 
 echo.
 echo ==================================================
