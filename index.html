@@ -697,11 +697,11 @@
             }
         }
 
-        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
+        // function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); } CFG
+        function getApiKey() { return 'AIzaSyCMHrbZt5oUBHLr4va3j5VNWH8Srk57bFc'; } // CFG
 
         function checkApiKey() {
-            //const apiKey = getApiKey(); // CFG
-            const apiKey = 'AIzaSyCMHrbZt5oUBHLr4va3j5VNWH8Srk57bFc'; // CFG
+            const apiKey = getApiKey();
             document.getElementById('apiKeySection').style.display = apiKey ? 'none' : 'block';
             document.getElementById('mainApp').style.display = apiKey ? 'block' : 'none';
             return !!apiKey;
