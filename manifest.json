@@ -1,0 +1,38 @@
+
+{
+  "name": "PlantCare con Gemini",
+  "short_name": "PlantCare",
+  "description": "Identifica y cuida tus plantas con IA de Gemini.",
+  "start_url": "./GEMINI-plant_identifier_app.html",
+  "display": "standalone",
+  "background_color": "#764ba2",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/gemini_48dp.png",
+      "type": "image/png",
+      "sizes": "48x48"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/gemini_96dp.png",
+      "type": "image/png",
+      "sizes": "96x96"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_128dp.png",
+      "type": "image/png",
+      "sizes": "128x128"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_192dp.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_512dp.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
