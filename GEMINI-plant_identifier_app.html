@@ -700,7 +700,8 @@
         function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
 
         function checkApiKey() {
-            const apiKey = getApiKey();
+            //const apiKey = getApiKey(); // CFG
+            const apiKey = 'AIzaSyCMHrbZt5oUBHLr4va3j5VNWH8Srk57bFc'; // CFG
             document.getElementById('apiKeySection').style.display = apiKey ? 'none' : 'block';
             document.getElementById('mainApp').style.display = apiKey ? 'block' : 'none';
             return !!apiKey;
