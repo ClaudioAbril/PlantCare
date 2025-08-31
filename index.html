@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantCare v2.0 - Identificador de Plantas con Gemini</title>
+    <meta name="theme-color" content="#059669">
+    <meta name="description" content="Identifica y cuida tus plantas con IA de Gemini">
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --header-bg: rgba(255, 255, 255, 0.1);
+            --text-primary: #333;
+            --text-secondary: #6b7280;
+            --text-header: white;
+            --text-header-secondary: rgba(255, 255, 255, 0.8);
+            --container-bg: rgba(255, 255, 255, 0.95);
+            --container-border: rgba(255, 255, 255, 0.3);
+            --item-bg: #f8fafc;
+            --item-hover-bg: #f1f5f9;
+            --recommendation-border: #059669;
+            --health-bg: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            --health-border: #10b981;
+            --health-text-color: #059669;
+            --confidence-bar-bg: #e5e7eb;
+            --slider-bg: #ccc;
+        }
+
+        body.dark-mode {
+            --bg-gradient-start: #1f2937;
+            --bg-gradient-end: #111827;
+            --header-bg: rgba(0, 0, 0, 0.2);
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --container-bg: rgba(31, 41, 55, 0.85);
+            --container-border: rgba(255, 255, 255, 0.1);
+            --item-bg: #374151;
+            --item-hover-bg: #4b5563;
+            --recommendation-border: #34d399;
+            --health-bg: linear-gradient(135deg, #1f2937, #374151);
+            --health-border: #34d399;
+            --health-text-color: #a7f3d0;
+            --confidence-bar-bg: #4b5563;
+            --slider-bg: #4b5563;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .app-container {
+            min-height: 100vh;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: var(--header-bg);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--container-border);
+            padding: 1rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            flex: 1;
+            text-align: center;
+            margin-left: 60px;
+        }
+
+        .header h1 {
+            color: var(--text-header);
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            color: var(--text-header-secondary);
+            font-size: 0.9rem;
+        }
+
+        .api-key-section,
+        .upload-section,
+        .history-section,
+        .analysis-container {
+            background: var(--container-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            margin: 1rem auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--container-border);
+            max-width: 500px;
+        }
+
+        .api-key-section {
+            text-align: center;
+        }
+
+        .api-key-section h3 {
+            color: #059669;
+            margin-bottom: 1rem;
+        }
+
+        .api-key-section p {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .api-key-section input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            background-color: var(--item-bg);
+            color: var(--text-primary);
+        }
+
+        .main-content {
+            padding: 1rem;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .upload-section {
+            margin-bottom: 2rem;
+            transform: translateY(0);
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .upload-area {
+            border: 3px dashed #059669;
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #f0fdf4, #ecfdf5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        body.dark-mode .upload-area {
+            background: #1f2937;
+        }
+
+        .upload-area:hover {
+            border-color: #10b981;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #059669;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .upload-text {
+            color: #059669;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-subtext {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        #fileInput,
+        #cameraInput {
+            display: none;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            box-shadow: 0 10px 20px rgba(5, 150, 105, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .preview-container {
+            margin-top: 1.5rem;
+            display: none;
+        }
+
+        .preview-image {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .analysis-container {
+            display: none;
+            animation: slideUp 0.5s ease;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: white;
+            background: var(--header-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid var(--container-border);
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--confidence-bar-bg);
+        }
+
+        .plant-icon {
+            font-size: 2.5rem;
+            margin-right: 1rem;
+            background: linear-gradient(135deg, #059669, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .result-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #059669;
+            margin-bottom: 0.25rem;
+        }
+
+        body.dark-mode .result-title {
+            color: #34d399;
+        }
+
+        .result-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .result-title a:hover {
+            text-decoration: underline;
+        }
+
+        .result-subtitle {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .health-status {
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0;
+            padding: 1rem;
+            border-radius: 12px;
+            background: var(--health-bg);
+            border-left: 4px solid var(--health-border);
+        }
+
+        .health-icon {
+            font-size: 1.5rem;
+            margin-right: 0.75rem;
+        }
+
+        .health-text {
+            font-weight: 600;
+            color: var(--health-text-color);
+        }
+
+        .section {
+            margin: 1.5rem 0;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 1.2rem;
+            background: linear-gradient(135deg, #059669, #10b981);
+            border-radius: 2px;
+            margin-right: 0.75rem;
+        }
+
+        .recommendations {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .recommendation-item {
+            background: var(--item-bg);
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border-radius: 12px;
+            border-left: 3px solid var(--recommendation-border);
+            transition: all 0.3s ease;
+        }
+
+        .recommendation-item:hover {
+            background: var(--item-hover-bg);
+            transform: translateX(5px);
+        }
+
+        .recommendation-title {
+            font-weight: 600;
+            color: #059669;
+            margin-bottom: 0.5rem;
+        }
+
+        body.dark-mode .recommendation-title {
+            color: #34d399;
+        }
+
+        .recommendation-text {
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            background: var(--item-bg);
+            border-radius: 12px;
+            margin: 0.75rem 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .history-item:hover {
+            background: var(--item-hover-bg);
+            transform: translateX(5px);
+        }
+
+        .history-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-right: 1rem;
+        }
+
+        .history-info h3 {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .history-info p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .floating-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #059669, #10b981);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(5, 150, 105, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .floating-btn:hover {
+            transform: scale(1.1) rotate(180deg);
+            box-shadow: 0 15px 40px rgba(5, 150, 105, 0.6);
+        }
+
+        .tab-container {
+            display: flex;
+            background: var(--header-bg);
+            border-radius: 15px;
+            padding: 0.5rem;
+            max-width: 500px;
+            margin: 1rem auto;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: transparent;
+            border: none;
+            border-radius: 10px;
+            color: var(--text-header-secondary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        body.dark-mode .tab.active {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .confidence-bar {
+            background: var(--confidence-bar-bg);
+            height: 8px;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        /* Theme Switch */
+        .theme-switch-wrapper {
+            display: flex;
+            align-items: center;
+        }
+
+        .theme-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+
+        .theme-switch input {
+            display: none;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--slider-bg);
+            transition: .4s;
+            border-radius: 28px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #059669;
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(22px);
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header-title {
+                margin-left: 0;
+            }
+
+            .header {
+                flex-direction: column;
+            }
+
+            .theme-switch-wrapper {
+                position: static;
+                transform: none;
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-title">
+                <h1>🌿 PlantCare</h1>
+                <p>Identifica y cuida tus plantas con IA de Gemini</p>
+            </div>
+            <div class="theme-switch-wrapper">
+                <label class="theme-switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </header>
+
+        <div id="apiKeySection" class="api-key-section" style="display: none;">
+            <h3>Configurar API Key de Gemini</h3>
+            <p>Para analizar las plantas, necesitas una API Key de Google AI Studio. Consíguela gratis y pégala aquí.
+            </p>
+            <input type="password" id="apiKeyInput" placeholder="Pega tu API Key aquí">
+            <button class="btn btn-primary" onclick="saveApiKey()">Guardar Clave</button>
+        </div>
+
+        <div id="mainApp" style="display: none;">
+            <div class="tab-container">
+                <button class="tab active" onclick="switchTab('camera')">📸 Analizar</button>
+                <button class="tab" onclick="switchTab('history')">📚 Historial</button>
+            </div>
+
+            <main class="main-content">
+                <div id="cameraTab" class="tab-content active">
+                    <div class="upload-section">
+                        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                            <span class="upload-icon">📸</span>
+                            <div class="upload-text">Toca para fotografiar tu planta</div>
+                            <div class="upload-subtext">O selecciona una imagen de tu galería</div>
+                        </div>
+
+                        <input type="file" id="fileInput" accept="image/*">
+                        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="openCamera()">📷 Abrir Cámara</button>
+                            <button class="btn btn-secondary" onclick="openGallery()">🖼️ Galería</button>
+                        </div>
+
+                        <div class="preview-container" id="previewContainer">
+                            <img id="previewImage" class="preview-image" alt="Vista previa">
+                            <button class="btn btn-primary" onclick="analyzeImage()"
+                                style="margin-top: 1rem; width: 100%;">🔍 Analizar Planta</button>
+                        </div>
+                    </div>
+
+                    <div class="loading" id="loadingIndicator">
+                        <div class="loading-spinner"></div>
+                        <p>Analizando tu planta con IA de Gemini...</p>
+                    </div>
+
+                    <div class="analysis-container" id="analysisResult"></div>
+                </div>
+
+                <div id="historyTab" class="tab-content">
+                    <div class="history-section">
+                        <h2 class="section-title">📚 Historial de Plantas</h2>
+                        <div id="historyList"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <button class="floating-btn" onclick="takePhoto()" title="Tomar foto rápida">📸</button>
+    </div>
+
+    <script>
+        let currentImageData = null;
+        let plantHistory = [];
+        let currentUserPosition = null;
+        const GEMINI_API_KEY_STORAGE_KEY = 'gemini_api_key';
+        const PLANT_HISTORY_STORAGE_KEY = 'plant_history';
+        const THEME_STORAGE_KEY = 'plantcare_theme';
+
+        const themeToggle = document.getElementById('themeToggle');
+
+        function applyTheme(theme) {
+            document.body.classList.toggle('dark-mode', theme === 'dark');
+            themeToggle.checked = theme === 'dark';
+        }
+
+        function toggleTheme() {
+            const newTheme = themeToggle.checked ? 'dark' : 'light';
+            localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+            applyTheme(newTheme);
+        }
+
+        themeToggle.addEventListener('change', toggleTheme);
+
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (apiKey) {
+                localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+                alert('API Key guardada correctamente.');
+                initializeApp();
+            } else {
+                alert('Por favor, introduce una API Key válida.');
+            }
+        }
+
+        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
+
+        function checkApiKey() {
+            const apiKey = getApiKey();
+            document.getElementById('apiKeySection').style.display = apiKey ? 'none' : 'block';
+            document.getElementById('mainApp').style.display = apiKey ? 'block' : 'none';
+            return !!apiKey;
+        }
+
+        function loadHistory() {
+            const storedHistory = localStorage.getItem(PLANT_HISTORY_STORAGE_KEY);
+            if (storedHistory) { plantHistory = JSON.parse(storedHistory); }
+            updateHistoryDisplay();
+        }
+
+        function saveToHistory(analysis) {
+            const historyItem = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString('es-ES'),
+                time: new Date().toLocaleTimeString('es-ES'),
+                image: currentImageData,
+                analysis: analysis,
+                position: currentUserPosition
+            };
+            plantHistory.unshift(historyItem);
+            if (plantHistory.length > 10) { plantHistory = plantHistory.slice(0, 10); }
+            localStorage.setItem(PLANT_HISTORY_STORAGE_KEY, JSON.stringify(plantHistory));
+            updateHistoryDisplay();
+            currentUserPosition = null; // Reset position after saving
+        }
+
+        function updateHistoryDisplay() {
+            const historyList = document.getElementById('historyList');
+            if (plantHistory.length === 0) {
+                historyList.innerHTML = `<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No hay plantas analizadas aún.<br>¡Toma tu primera foto!</p>`;
+                return;
+            }
+            historyList.innerHTML = plantHistory.map(item => `
+                <div class="history-item" onclick="showHistoryItem(${item.id})">
+                    <img src="${item.image}" alt="Planta" class="history-image">
+                    <div class="history-info">
+                        <h3>${item.analysis.name}</h3>
+                        <p>${item.date} - ${item.time}</p>
+                    </div>
+                </div>`).join('');
+        }
+
+        function showHistoryItem(id) {
+            const item = plantHistory.find(p => p.id === id);
+            if (item) {
+                // For historic items, we pass the saved position
+                displayAnalysis(item.analysis, item.position);
+                switchTab('camera');
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentUserPosition = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                        console.log("Ubicación obtenida:", currentUserPosition);
+                    },
+                    () => { console.log("No se pudo obtener la ubicación."); currentUserPosition = null; }
+                );
+            } else {
+                console.log("Geolocalización no es soportada por este navegador.");
+                currentUserPosition = null;
+            }
+        }
+
+        function openCamera() { getLocation(); document.getElementById('cameraInput').click(); }
+        function openGallery() { getLocation(); document.getElementById('fileInput').click(); }
+        function takePhoto() { openCamera(); }
+
+        document.getElementById('fileInput').addEventListener('change', handleFileSelection);
+        document.getElementById('cameraInput').addEventListener('change', handleFileSelection);
+
+        function handleFileSelection(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    currentImageData = e.target.result;
+                    document.getElementById('previewImage').src = e.target.result;
+                    document.getElementById('previewContainer').style.display = 'block';
+                    document.getElementById('analysisResult').style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function analyzeImage() {
+            if (!currentImageData) { alert("Por favor, selecciona una imagen primero."); return; }
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const analysisResult = document.getElementById('analysisResult');
+            const previewContainer = document.getElementById('previewContainer');
+            loadingIndicator.style.display = 'block';
+            analysisResult.style.display = 'none';
+            previewContainer.style.display = 'none';
+            try {
+                const analysis = await consultarIAParaAnalisis(currentImageData);
+                displayAnalysis(analysis, currentUserPosition);
+                saveToHistory(analysis);
+            } catch (error) {
+                console.error("Error en el análisis:", error);
+                analysisResult.innerHTML = `<p style="color: red; text-align: center;"><b>Error:</b> ${error.message}</p>`;
+                analysisResult.style.display = 'block';
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+
+        function displayAnalysis(analysis, position) {
+            const analysisResult = document.getElementById('analysisResult');
+            let recommendationsHtml = analysis.recommendations.map(rec => `
+                <li class="recommendation-item">
+                    <h4 class="recommendation-title">${rec.title}</h4>
+                    <p class="recommendation-text">${rec.text}</p>
+                </li>`).join('');
+            const wikipediaUrl = `https://es.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(analysis.name)}`;
+
+            let locationHtml = '';
+            if (position && position.latitude) {
+                const mapsUrl = `https://www.google.com/maps?q=${position.latitude},${position.longitude}`;
+                locationHtml = `
+                <div class="section">
+                    <h3 class="section-title">📍 Ubicación de la Foto</h3>
+                    <p><a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Ver en Google Maps</a></p>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary);">Lat: ${position.latitude.toFixed(4)}, Lon: ${position.longitude.toFixed(4)}</p>
+                </div>`;
+            }
+
+            analysisResult.innerHTML = `
+                <div class="result-header">
+                    <span class="plant-icon">${analysis.healthIcon || '🌱'}</span>
+                    <div>
+                        <h2 class="result-title"><a href="${wikipediaUrl}" target="_blank" rel="noopener noreferrer" title="Buscar en Wikipedia">${analysis.name}</a></h2>
+                        <p class="result-subtitle">${analysis.scientific}</p>
+                    </div>
+                </div>
+                <div class="health-status">
+                    <span class="health-icon">${analysis.healthIcon || '💚'}</span>
+                    <span class="health-text">Estado: ${analysis.health}</span>
+                </div>
+                <div class="section">
+                    <h3 class="section-title">🎯 Confianza del Análisis</h3>
+                    <div class="confidence-bar"><div class="confidence-fill" style="width: ${analysis.confidence}%"></div></div>
+                    <p style="text-align: center; margin-top: 0.5rem; color: var(--text-secondary);"><span>${analysis.confidence}%</span> de confianza</p>
+                </div>
+                ${locationHtml}
+                <div class="section" id="flowering-section"></div>
+                <div class="section">
+                    <h3 class="section-title">🔍 Identificación</h3>
+                    <p>${analysis.identification}</p>
+                </div>
+                <div class="section">
+                    <h3 class="section-title">💡 Recomendaciones de Cuidado</h3>
+                    <ul class="recommendations">${recommendationsHtml}</ul>
+                </div>
+                <div id="share-button-container" style="margin-top: 1.5rem;"></div>`;
+            analysisResult.style.display = 'block';
+
+            // Add flowering/fruits section if available
+            if (analysis.flowers_or_fruits) {
+                const floweringSection = document.getElementById('flowering-section');
+                floweringSection.innerHTML = `
+                    <h3 class="section-title">🌸 Época de Floración / Fruto</h3>
+                    <p>${analysis.flowers_or_fruits}</p>
+                `;
+            }
+
+            if (navigator.share) {
+                const shareButtonContainer = document.getElementById('share-button-container');
+                shareButtonContainer.innerHTML = ''; // Clear previous button
+                const shareButton = document.createElement('button');
+                shareButton.innerHTML = '🔗 Compartir Análisis';
+                shareButton.className = 'btn btn-secondary';
+                shareButton.onclick = () => {
+                    navigator.share({
+                        title: `Análisis de ${analysis.name}`,
+                        text: `¡He identificado una planta con PlantCare! Es un(a) ${analysis.name} y su estado es: ${analysis.health}.`,
+                        url: window.location.href
+                    }).catch(error => console.log('Error al compartir', error));
+                };
+                shareButtonContainer.appendChild(shareButton);
+            }
+        }
+
+        async function consultarIAParaAnalisis(imagenBase64) {
+            const apiKey = getApiKey();
+            if (!apiKey) { throw new Error("La API Key de Gemini no está configurada."); }
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            const prompt = `Toma el rol de un experto botánico y agrónomo. Analiza la imagen de la planta y proporciona un diagnóstico detallado. Tu respuesta DEBE ser únicamente un objeto JSON válido, sin texto antes ni después, y sin usar markdown. La estructura del JSON debe ser la siguiente: {"name": "Nombre común", "scientific": "Nombre científico", "flowers_or_fruits": "Indica en que estación florece o da frutos.", "health": "Describe el estado de salud en 2 o 3 palabras (ej: 'Saludable', 'Con deficiencia de nitrógeno', 'Ataque de pulgones')", "healthIcon": "Un único emoji que represente el estado (ej: '🌱', '💚', '⚠️', '🚨', '🐛')", "confidence": Un número entero entre 0 y 100 que represente tu nivel de confianza en la identificación de la planta, "identification": "Un párrafo corto (2-3 frases) describiendo la planta y sus características visibles en la foto.", "recommendations": [{"title": "Título corto con emoji para la recomendación 1", "text": "Párrafo con la recomendación detallada."}, {"title": "Título corto con emoji para la recomendación 2", "text": "Párrafo con la recomendación detallada."}] } Si la planta está enferma, una de las recomendaciones DEBE ser sobre cómo tratar la enfermedad, seguido de un párrafo corto específico en MAYUSCULAS, como 'Agua y azúcar' o 'Menos sol', lo que aplique a la solución real de la enfermedad en forma casera. Si está sana, las recomendaciones deben ser sobre mantenimiento y cuidados preventivos.`;
+            const mimeType = imagenBase64.substring(imagenBase64.indexOf(":") + 1, imagenBase64.indexOf(";"));
+            const pureBase64 = imagenBase64.substring(imagenBase64.indexOf(",") + 1);
+            const payload = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: pureBase64 } }] }] };
+            const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) { const errorBody = await response.json(); throw new Error(`Error de la API de Gemini: ${errorBody.error.message}`); }
+            const responseData = await response.json();
+            try {
+                const jsonText = responseData.candidates[0].content.parts[0].text;
+                const cleanedJsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+                return JSON.parse(cleanedJsonText);
+            } catch (e) { throw new Error("La respuesta de la IA no tenía el formato JSON esperado."); }
+        }
+
+        function initializeApp() {
+            const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light';
+            applyTheme(savedTheme);
+            if (checkApiKey()) { loadHistory(); }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeApp();
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js').then(reg => console.log('SW registrado!', reg)).catch(err => console.log('SW no registrado', err));
+            }
+        });
+    </script>
+</body>
+
+</html>
