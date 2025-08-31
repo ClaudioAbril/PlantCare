@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlantCare v2.0 - Identificador de Plantas con Gemini</title>
+    <title>PlantCare v2.05 - Identificador de Plantas con Gemini</title>
     <meta name="theme-color" content="#059669">
     <meta name="description" content="Identifica y cuida tus plantas con IA de Gemini">
     <link rel="manifest" href="manifest.json">
@@ -594,7 +594,7 @@
     <div class="app-container">
         <header class="header">
             <div class="header-title">
-                <h1>🌿 PlantCare v2.0</h1>
+                <h1>🌿 PlantCare v2.05</h1>
                 <p>Identifica y cuida tus plantas con IA de Gemini</p>
             </div>
             <div class="theme-switch-wrapper">
@@ -697,11 +697,11 @@
             }
         }
 
-        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
+        //function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); } // CFG
+        function getApiKey() { return 'AIzaSyDbs4xpEqC2VHEqS7oNM3I1ZkOH8Bu8e8o'; } // CFG
 
         function checkApiKey() {
-            //const apiKey = getApiKey(); // CFG
-            const apiKey = 'AIzaSyCMHrbZt5oUBHLr4va3j5VNWH8Srk57bFc'; // CFG
+            const apiKey = getApiKey();
             document.getElementById('apiKeySection').style.display = apiKey ? 'none' : 'block';
             document.getElementById('mainApp').style.display = apiKey ? 'block' : 'none';
             return !!apiKey;
