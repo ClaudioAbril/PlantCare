@@ -1,7 +1,7 @@
 
-const CACHE_NAME = 'plantcare-gemini-v1';
+const CACHE_NAME = 'plantcare-gemini-v2';
 const urlsToCache = [
-  './GEMINI-plant_identifier_app.html',
+  './index.html',
   './manifest.json'
 ];
 
@@ -27,6 +27,10 @@ self.addEventListener('fetch', event => {
         }
         // Si no, realiza la petición a la red
         return fetch(event.request);
+      })
+  );
+});
+t);
       })
   );
 });
