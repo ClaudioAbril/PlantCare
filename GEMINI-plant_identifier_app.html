@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlantCare - Identificador de Plantas con Gemini</title>
+    <title>PlantCare v2.05 - Identificador de Plantas con Gemini</title>
     <meta name="theme-color" content="#059669">
     <meta name="description" content="Identifica y cuida tus plantas con IA de Gemini">
     <link rel="manifest" href="manifest.json">
@@ -415,6 +415,18 @@
             margin-right: 1rem;
         }
 
+        .history-icon {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            border-radius: 10px;
+            margin-right: 1rem;
+            background-color: var(--item-hover-bg);
+        }
+
         .history-info h3 {
             color: var(--text-primary);
             font-weight: 600;
@@ -594,7 +606,7 @@
     <div class="app-container">
         <header class="header">
             <div class="header-title">
-                <h1>🌿 PlantCare</h1>
+                <h1>🌿 PlantCare v2.05</h1>
                 <p>Identifica y cuida tus plantas con IA de Gemini</p>
             </div>
             <div class="theme-switch-wrapper">
@@ -670,6 +682,7 @@
         const GEMINI_API_KEY_STORAGE_KEY = 'gemini_api_key';
         const PLANT_HISTORY_STORAGE_KEY = 'plant_history';
         const THEME_STORAGE_KEY = 'plantcare_theme';
+        const GEMINI_MODEL = 'gemini-2.5-flash-lite'; // Modelo de IA a utilizar. Puedes cambiarlo por otros como 'gemini-1.5-pro-latest'
 
         const themeToggle = document.getElementById('themeToggle');
 
@@ -697,7 +710,8 @@
             }
         }
 
-        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
+        //function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); } // CFG
+        function getApiKey() { return 'AIzaSyAh22IT1aDk1deJBBOCSVc6WzF-eNdJdbY'; } // CFG
 
         function checkApiKey() {
             const apiKey = getApiKey();
@@ -717,7 +731,6 @@
                 id: Date.now(),
                 date: new Date().toLocaleDateString('es-ES'),
                 time: new Date().toLocaleTimeString('es-ES'),
-                image: currentImageData,
                 analysis: analysis,
                 position: currentUserPosition
             };
@@ -736,7 +749,7 @@
             }
             historyList.innerHTML = plantHistory.map(item => `
                 <div class="history-item" onclick="showHistoryItem(${item.id})">
-                    <img src="${item.image}" alt="Planta" class="history-image">
+                    <div class="history-icon">${item.analysis.healthIcon || '🌱'}</div>
                     <div class="history-info">
                         <h3>${item.analysis.name}</h3>
                         <p>${item.date} - ${item.time}</p>
@@ -899,7 +912,8 @@
         async function consultarIAParaAnalisis(imagenBase64) {
             const apiKey = getApiKey();
             if (!apiKey) { throw new Error("La API Key de Gemini no está configurada."); }
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            // Usamos la API v1 (estable) y el modelo definido en la constante.
+            const API_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
             const prompt = `Toma el rol de un experto botánico y agrónomo. Analiza la imagen de la planta y proporciona un diagnóstico detallado. Tu respuesta DEBE ser únicamente un objeto JSON válido, sin texto antes ni después, y sin usar markdown. La estructura del JSON debe ser la siguiente: {"name": "Nombre común", "scientific": "Nombre científico", "flowers_or_fruits": "Indica en que estación florece o da frutos.", "health": "Describe el estado de salud en 2 o 3 palabras (ej: 'Saludable', 'Con deficiencia de nitrógeno', 'Ataque de pulgones')", "healthIcon": "Un único emoji que represente el estado (ej: '🌱', '💚', '⚠️', '🚨', '🐛')", "confidence": Un número entero entre 0 y 100 que represente tu nivel de confianza en la identificación de la planta, "identification": "Un párrafo corto (2-3 frases) describiendo la planta y sus características visibles en la foto.", "recommendations": [{"title": "Título corto con emoji para la recomendación 1", "text": "Párrafo con la recomendación detallada."}, {"title": "Título corto con emoji para la recomendación 2", "text": "Párrafo con la recomendación detallada."}] } Si la planta está enferma, una de las recomendaciones DEBE ser sobre cómo tratar la enfermedad, seguido de un párrafo corto específico en MAYUSCULAS, como 'Agua y azúcar' o 'Menos sol', lo que aplique a la solución real de la enfermedad en forma casera. Si está sana, las recomendaciones deben ser sobre mantenimiento y cuidados preventivos.`;
             const mimeType = imagenBase64.substring(imagenBase64.indexOf(":") + 1, imagenBase64.indexOf(";"));
             const pureBase64 = imagenBase64.substring(imagenBase64.indexOf(",") + 1);
