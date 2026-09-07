@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'plantcare-gemini-v2';
+const CACHE_NAME = 'plantcare-gemini-v3';
 const urlsToCache = [
   './index.html',
   './manifest.json'
@@ -27,10 +27,6 @@ self.addEventListener('fetch', event => {
         }
         // Si no, realiza la petición a la red
         return fetch(event.request);
-      })
-  );
-});
-t);
       })
   );
 });

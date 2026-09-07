@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlantCare v2.05 - Identificador de Plantas con Gemini</title>
+    <title>PlantCare v20260906 - Identificador y Curador de Plantas con Gemini</title>
     <meta name="theme-color" content="#059669">
-    <meta name="description" content="Identifica y cuida tus plantas con IA de Gemini">
+    <meta name="description" content="Identifica, diagnostica y cura tus plantas con IA de Gemini, con remedios caseros">
     <link rel="manifest" href="manifest.json">
 
     <style>
@@ -562,6 +562,138 @@
             transform: translateX(22px);
         }
 
+        /* Severidad del problema */
+        .severity-badge {
+            margin-left: auto;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .severity-ninguna { background: #d1fae5; color: #065f46; }
+        .severity-leve { background: #fef9c3; color: #854d0e; }
+        .severity-moderada { background: #ffedd5; color: #9a3412; }
+        .severity-grave { background: #fee2e2; color: #991b1b; }
+
+        /* Remedios caseros */
+        .remedy-card {
+            background: var(--item-bg);
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border-radius: 12px;
+            border-left: 3px solid #f59e0b;
+        }
+
+        .remedy-title {
+            font-weight: 600;
+            color: #b45309;
+            margin-bottom: 0.25rem;
+        }
+
+        body.dark-mode .remedy-title {
+            color: #fbbf24;
+        }
+
+        .remedy-sub {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            margin-bottom: 0.5rem;
+        }
+
+        .remedy-ingredients {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin: 0.5rem 0 0.75rem;
+        }
+
+        .ingredient-chip {
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            color: #9a3412;
+            border-radius: 999px;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        body.dark-mode .ingredient-chip {
+            background: #451a03;
+            border-color: #b45309;
+            color: #fcd34d;
+        }
+
+        .remedy-step {
+            margin: 0.4rem 0;
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .remedy-step strong {
+            color: var(--text-primary);
+        }
+
+        .remedy-warning {
+            background: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            margin-top: 0.6rem;
+            line-height: 1.4;
+        }
+
+        body.dark-mode .remedy-warning {
+            background: #450a0a;
+            color: #fecaca;
+        }
+
+        /* Ajustes avanzados (selector de modelo) */
+        .settings-details {
+            background: var(--container-bg);
+            border-radius: 15px;
+            padding: 0.75rem 1.25rem;
+            margin: 1rem auto;
+            max-width: 500px;
+            border: 1px solid var(--container-border);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .settings-details summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .settings-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 0.75rem 0 0.25rem;
+            color: var(--text-primary);
+        }
+
+        .model-select {
+            width: 100%;
+            padding: 0.6rem;
+            border-radius: 10px;
+            border: 2px solid #ddd;
+            background: var(--item-bg);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .settings-hint {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
         @keyframes slideUp {
             from {
                 opacity: 0;
@@ -606,8 +738,8 @@
     <div class="app-container">
         <header class="header">
             <div class="header-title">
-                <h1>🌿 PlantCare v2.05</h1>
-                <p>Identifica y cuida tus plantas con IA de Gemini</p>
+                <h1>🌿 PlantCare v20260906</h1>
+                <p>Identifica, diagnostica y cura tus plantas con IA</p>
             </div>
             <div class="theme-switch-wrapper">
                 <label class="theme-switch">
@@ -670,6 +802,13 @@
                     </div>
                 </div>
             </main>
+
+            <details class="settings-details">
+                <summary>⚙️ Ajustes avanzados</summary>
+                <label class="settings-label" for="modelSelect">Modelo de IA</label>
+                <select id="modelSelect" class="model-select"></select>
+                <p class="settings-hint">Todos los modelos de la lista tienen capa gratuita en la API de Gemini. "Gemini 3.8 Flash" es el más capaz de los gratuitos.</p>
+            </details>
         </div>
 
         <button class="floating-btn" onclick="takePhoto()" title="Tomar foto rápida">📸</button>
@@ -682,7 +821,30 @@
         const GEMINI_API_KEY_STORAGE_KEY = 'gemini_api_key';
         const PLANT_HISTORY_STORAGE_KEY = 'plant_history';
         const THEME_STORAGE_KEY = 'plantcare_theme';
-        const GEMINI_MODEL = 'gemini-2.5-flash-lite'; // Modelo de IA a utilizar. Puedes cambiarlo por otros como 'gemini-1.5-pro-latest'
+        const GEMINI_MODELS = [
+            { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash — más avanzado (recomendado)' },
+            { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+            { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (más rápido, más simple)' }
+        ];
+        const MODEL_STORAGE_KEY = 'plantcare_model';
+
+        function getModel() {
+            const saved = localStorage.getItem(MODEL_STORAGE_KEY);
+            return (saved && GEMINI_MODELS.some(m => m.id === saved)) ? saved : GEMINI_MODELS[0].id;
+        }
+
+        function populateModelSelect() {
+            const select = document.getElementById('modelSelect');
+            if (!select) return;
+            select.innerHTML = GEMINI_MODELS.map(m =>
+                `<option value="${m.id}" ${m.id === getModel() ? 'selected' : ''}>${m.label}</option>`
+            ).join('');
+            select.addEventListener('change', () => {
+                localStorage.setItem(MODEL_STORAGE_KEY, select.value);
+            });
+        }
 
         const themeToggle = document.getElementById('themeToggle');
 
@@ -835,12 +997,74 @@
 
         function displayAnalysis(analysis, position) {
             const analysisResult = document.getElementById('analysisResult');
-            let recommendationsHtml = analysis.recommendations.map(rec => `
+            const recommendations = analysis.recommendations || [];
+            const recommendationsHtml = recommendations.map(rec => `
                 <li class="recommendation-item">
                     <h4 class="recommendation-title">${rec.title}</h4>
                     <p class="recommendation-text">${rec.text}</p>
                 </li>`).join('');
             const wikipediaUrl = `https://es.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(analysis.name)}`;
+
+            const severity = (analysis.severity || 'ninguna').toLowerCase();
+            const severityBadgeHtml = ['leve', 'moderada', 'grave'].includes(severity)
+                ? `<span class="severity-badge severity-${severity}">${severity}</span>` : '';
+
+            let problemsHtml = '';
+            if (analysis.problems && analysis.problems.length) {
+                problemsHtml = `
+                <div class="section">
+                    <h3 class="section-title">🐛 Problemas Detectados</h3>
+                    <ul class="recommendations">
+                        ${analysis.problems.map(p => `
+                        <li class="recommendation-item" style="border-left-color: #ef4444;">
+                            <h4 class="recommendation-title" style="color: #dc2626;">${p.problem}</h4>
+                            <p class="recommendation-text">${p.symptoms || ''}${p.cause ? ` <em>(Causa probable: ${p.cause})</em>` : ''}</p>
+                        </li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            let homeRemediesHtml = '';
+            if (analysis.homeRemedies && analysis.homeRemedies.length) {
+                homeRemediesHtml = `
+                <div class="section">
+                    <h3 class="section-title">🧪 Remedios Caseros</h3>
+                    ${analysis.homeRemedies.map(r => `
+                    <div class="remedy-card">
+                        <h4 class="remedy-title">${r.title}</h4>
+                        ${r.treats ? `<p class="remedy-sub">🎯 Para: ${r.treats}</p>` : ''}
+                        ${r.ingredients && r.ingredients.length ? `<div class="remedy-ingredients">${r.ingredients.map(i => `<span class="ingredient-chip">${i}</span>`).join('')}</div>` : ''}
+                        ${r.preparation ? `<p class="remedy-step"><strong>🥣 Preparación:</strong> ${r.preparation}</p>` : ''}
+                        ${r.application ? `<p class="remedy-step"><strong>💧 Aplicación:</strong> ${r.application}</p>` : ''}
+                        ${r.frequency ? `<p class="remedy-step"><strong>⏱️ Frecuencia:</strong> ${r.frequency}</p>` : ''}
+                        ${r.warning ? `<p class="remedy-warning">⚠️ ${r.warning}</p>` : ''}
+                    </div>`).join('')}
+                </div>`;
+            }
+
+            let wellnessHtml = '';
+            if (analysis.wellnessTips && analysis.wellnessTips.length) {
+                wellnessHtml = `
+                <div class="section">
+                    <h3 class="section-title">🌿 Plan de Bienestar</h3>
+                    <ul class="recommendations">
+                        ${analysis.wellnessTips.map(w => `
+                        <li class="recommendation-item">
+                            <h4 class="recommendation-title">${w.title}</h4>
+                            <p class="recommendation-text">${w.text}</p>
+                        </li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            let recommendationsSectionHtml = '';
+            if (recommendations.length) {
+                recommendationsSectionHtml = `
+                <div class="section">
+                    <h3 class="section-title">💡 Recomendaciones de Cuidado</h3>
+                    <ul class="recommendations">${recommendationsHtml}</ul>
+                </div>`;
+            }
 
             let locationHtml = '';
             if (position && position.latitude) {
@@ -864,6 +1088,7 @@
                 <div class="health-status">
                     <span class="health-icon">${analysis.healthIcon || '💚'}</span>
                     <span class="health-text">Estado: ${analysis.health}</span>
+                    ${severityBadgeHtml}
                 </div>
                 <div class="section">
                     <h3 class="section-title">🎯 Confianza del Análisis</h3>
@@ -876,10 +1101,10 @@
                     <h3 class="section-title">🔍 Identificación</h3>
                     <p>${analysis.identification}</p>
                 </div>
-                <div class="section">
-                    <h3 class="section-title">💡 Recomendaciones de Cuidado</h3>
-                    <ul class="recommendations">${recommendationsHtml}</ul>
-                </div>
+                ${problemsHtml}
+                ${homeRemediesHtml}
+                ${wellnessHtml}
+                ${recommendationsSectionHtml}
                 <div id="share-button-container" style="margin-top: 1.5rem;"></div>`;
             analysisResult.style.display = 'block';
 
@@ -912,12 +1137,24 @@
         async function consultarIAParaAnalisis(imagenBase64) {
             const apiKey = getApiKey();
             if (!apiKey) { throw new Error("La API Key de Gemini no está configurada."); }
-            // Usamos la API v1 (estable) y el modelo definido en la constante.
-            const API_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-            const prompt = `Toma el rol de un experto botánico y agrónomo. Analiza la imagen de la planta y proporciona un diagnóstico detallado. Tu respuesta DEBE ser únicamente un objeto JSON válido, sin texto antes ni después, y sin usar markdown. La estructura del JSON debe ser la siguiente: {"name": "Nombre común", "scientific": "Nombre científico", "flowers_or_fruits": "Indica en que estación florece o da frutos.", "health": "Describe el estado de salud en 2 o 3 palabras (ej: 'Saludable', 'Con deficiencia de nitrógeno', 'Ataque de pulgones')", "healthIcon": "Un único emoji que represente el estado (ej: '🌱', '💚', '⚠️', '🚨', '🐛')", "confidence": Un número entero entre 0 y 100 que represente tu nivel de confianza en la identificación de la planta, "identification": "Un párrafo corto (2-3 frases) describiendo la planta y sus características visibles en la foto.", "recommendations": [{"title": "Título corto con emoji para la recomendación 1", "text": "Párrafo con la recomendación detallada."}, {"title": "Título corto con emoji para la recomendación 2", "text": "Párrafo con la recomendación detallada."}] } Si la planta está enferma, una de las recomendaciones DEBE ser sobre cómo tratar la enfermedad, seguido de un párrafo corto específico en MAYUSCULAS, como 'Agua y azúcar' o 'Menos sol', lo que aplique a la solución real de la enfermedad en forma casera. Si está sana, las recomendaciones deben ser sobre mantenimiento y cuidados preventivos.`;
+            // Usamos la API v1 (estable) y el modelo elegido en los ajustes.
+            const API_URL = `https://generativelanguage.googleapis.com/v1/models/${getModel()}:generateContent?key=${apiKey}`;
+            const prompt = `Toma el rol de un botánico experto y agrónomo con amplia experiencia en jardinería doméstica y remedios caseros. Analiza la imagen de la planta y devuelve ÚNICAMENTE un objeto JSON válido, sin texto antes ni después y sin markdown. La estructura obligatoria es:
+{"name": "Nombre común en español", "scientific": "Nombre científico", "flowers_or_fruits": "Época del año en la que florece o da frutos", "health": "Estado de salud en 2 a 4 palabras (ej: 'Saludable', 'Ataque de pulgones')", "healthIcon": "Un único emoji que represente el estado (ej: '🌱', '💚', '⚠️', '🚨', '🐛')", "severity": "ninguna|leve|moderada|grave (gravedad del problema detectado; 'ninguna' si está sana)", "confidence": entero entre 0 y 100 que represente tu confianza en la identificación, "identification": "Párrafo corto (2-3 frases) describiendo la planta y sus características visibles en la foto", "problems": [{"problem": "Nombre del problema o plaga", "cause": "Causa probable", "symptoms": "Síntomas visibles en la foto"}], "homeRemedies": [{"title": "Título corto con emoji", "treats": "Problema que trata o beneficio que aporta", "ingredients": ["Ingrediente y cantidad exacta en medidas caseras"], "preparation": "Pasos de preparación breves", "application": "Cómo se aplica (aspersión sobre hojas, riego al sustrato, espolvorear, etc.)", "frequency": "Frecuencia y duración del tratamiento (ej: 'cada 3 días durante 2 semanas')", "warning": "Precaución importante, o cadena vacía si no aplica"}], "wellnessTips": [{"title": "Título corto con emoji", "text": "Consejo concreto y accionable"}], "recommendations": [{"title": "Título corto con emoji", "text": "Párrafo con la recomendación detallada"}]}
+Reglas obligatorias:
+1. Si la planta está SANA: "problems" debe ser un array vacío, "severity" debe ser "ninguna", y "homeRemedies" y "wellnessTips" deben contener consejos de mantenimiento, nutrición y prevención usando ingredientes de hogar (ej: agua de arroz, café molido, cáscara de plátano, cáscaras de huevo trituradas).
+2. Si está ENFERMA o tiene plagas: "problems" debe listar cada problema detectado y "homeRemedies" DEBE incluir entre 2 y 4 remedios caseros concretos para tratarlos, usando ingredientes comunes de una casa (café, azúcar, vinagre blanco, bicarbonato de sodio, canela, ajo, cebolla, jabón de loza neutro, aspirina, leche, agua de arroz, cáscara de plátano, cáscaras de huevo, etc.), con cantidades exactas en medidas caseras (cucharadas, tazas, litros).
+3. Las diluciones deben ser seguras para la planta; si un remedio puede quemar las hojas o conviene probarlo primero en una hoja, indícalo en "warning".
+4. Si el problema es grave o los remedios caseros pueden no bastar, el "warning" del remedio más pertinente debe indicar en qué caso recurrir a un producto comercial específico (ej: jabón potásico, aceite de neem).
+5. "wellnessTips" debe tener 2 a 4 consejos para mejorar la calidad de vida de la planta (luz, riego, humedad, sustrato, nutrición, poda, ubicación).
+6. "recommendations" debe tener 2 recomendaciones generales de cuidado.
+7. Responde todo en español.`;
             const mimeType = imagenBase64.substring(imagenBase64.indexOf(":") + 1, imagenBase64.indexOf(";"));
             const pureBase64 = imagenBase64.substring(imagenBase64.indexOf(",") + 1);
-            const payload = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: pureBase64 } }] }] };
+            const payload = {
+                contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: pureBase64 } }] }],
+                generationConfig: { responseMimeType: 'application/json', temperature: 0.4 }
+            };
             const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) { const errorBody = await response.json(); throw new Error(`Error de la API de Gemini: ${errorBody.error.message}`); }
             const responseData = await response.json();
@@ -931,6 +1168,7 @@
         function initializeApp() {
             const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light';
             applyTheme(savedTheme);
+            populateModelSelect();
             if (checkApiKey()) { loadHistory(); }
         }
 
