@@ -6,8 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PlantCare v20260906 - Identificador y Curador de Plantas con Gemini</title>
     <meta name="theme-color" content="#059669">
-    <meta name="description"
-        content="Identifica, diagnostica y cura tus plantas con IA de Gemini, con remedios caseros">
+    <meta name="description" content="Identifica, diagnostica y cura tus plantas con IA de Gemini, con remedios caseros">
     <link rel="manifest" href="manifest.json">
 
     <style>
@@ -574,25 +573,10 @@
             letter-spacing: 0.03em;
         }
 
-        .severity-ninguna {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .severity-leve {
-            background: #fef9c3;
-            color: #854d0e;
-        }
-
-        .severity-moderada {
-            background: #ffedd5;
-            color: #9a3412;
-        }
-
-        .severity-grave {
-            background: #fee2e2;
-            color: #991b1b;
-        }
+        .severity-ninguna { background: #d1fae5; color: #065f46; }
+        .severity-leve { background: #fef9c3; color: #854d0e; }
+        .severity-moderada { background: #ffedd5; color: #9a3412; }
+        .severity-grave { background: #fee2e2; color: #991b1b; }
 
         /* Remedios caseros */
         .remedy-card {
@@ -823,8 +807,7 @@
                 <summary>⚙️ Ajustes avanzados</summary>
                 <label class="settings-label" for="modelSelect">Modelo de IA</label>
                 <select id="modelSelect" class="model-select"></select>
-                <p class="settings-hint">Todos los modelos de la lista tienen capa gratuita en la API de Gemini. "Gemini
-                    3.8 Flash" es el más capaz de los gratuitos.</p>
+                <p class="settings-hint">Todos los modelos de la lista tienen capa gratuita en la API de Gemini. "Gemini 3.8 Flash" es el más capaz de los gratuitos.</p>
             </details>
         </div>
 
@@ -889,7 +872,8 @@
             }
         }
 
-        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || ''; }
+        //function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); } // CFG
+        function getApiKey() { return 'AQ.Ab8RN6Jy7LwTWOHEYYevkOQmFIbGrRKQundPEhni38JlBaOVcg'; } // CFG
 
         function checkApiKey() {
             const apiKey = getApiKey();
