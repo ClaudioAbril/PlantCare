@@ -755,6 +755,7 @@
             </p>
             <input type="password" id="apiKeyInput" placeholder="Pega tu API Key aquí">
             <button class="btn btn-primary" onclick="saveApiKey()">Guardar Clave</button>
+            <p id="apiKeyVerifyMsg" style="min-height: 1.2rem; font-size: 0.85rem; margin-top: 0.75rem; color: var(--text-secondary);"></p>
         </div>
 
         <div id="mainApp" style="display: none;">
@@ -812,6 +813,7 @@
                 <input type="password" id="apiKeyField" class="model-select" placeholder="Pega aquí tu clave API de Gemini" autocomplete="off">
                 <button class="btn btn-primary" onclick="saveApiKeyFromSettings()"
                     style="margin-top: 0.75rem; width: 100%; padding: 0.75rem;">💾 Guardar Clave</button>
+                <p class="settings-hint" id="apiKeyCheckMsg" style="min-height: 1em;"></p>
                 <p class="settings-hint" id="apiKeyStatus">La clave se guarda solo en este dispositivo.</p>
             </details>
         </div>
@@ -866,28 +868,76 @@
 
         themeToggle.addEventListener('change', toggleTheme);
 
-        function saveApiKey() {
-            const apiKey = document.getElementById('apiKeyInput').value.trim();
-            if (apiKey) {
-                localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
-                alert('API Key guardada correctamente.');
-                initializeApp();
-            } else {
-                alert('Por favor, introduce una API Key válida.');
+        // Verifica la clave contra la API de Gemini ANTES de guardarla, haciendo
+        // una generación mínima de texto (sin imagen) con el modelo elegido. Así
+        // comprobamos en un solo paso: si la clave es válida, si el modelo
+        // seleccionado está disponible con ella y si la cuota gratuita está agotada.
+        async function validarApiKey(apiKey) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1/models/${getModel()}:generateContent?key=${encodeURIComponent(apiKey)}`;
+                const payload = { contents: [{ parts: [{ text: 'Responde únicamente: OK' }] }], generationConfig: { temperature: 0 } };
+                const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (response.ok) { return { ok: true }; }
+                let detail = '';
+                try { const errorBody = await response.json(); detail = errorBody.error && errorBody.error.message ? errorBody.error.message : ''; } catch (e) { /* cuerpo no JSON */ }
+                if (response.status === 429) {
+                    return { ok: true, warning: 'La clave es válida, pero el servicio está saturado o la cuota gratuita del modelo se agotó en este momento. Se guardará igual: probá el análisis en unos minutos o elegí otro modelo en Ajustes avanzados.' };
+                }
+                if (response.status === 404 || /not found/i.test(detail)) {
+                    return { ok: false, error: `El modelo "${getModel()}" no está disponible con esta clave. Cambiá el modelo en Ajustes avanzados y volvé a guardar.` };
+                }
+                return { ok: false, error: detail
+                    ? `La API rechazó la clave: ${detail}`
+                    : 'La clave no es válida. Revisá que esté copiada completa, sin espacios, y que no haya sido revocada en Google AI Studio.' };
+            } catch (e) {
+                return { ok: true, warning: 'No se pudo verificar la clave (¿falta conexión?). Se guardará sin verificar.' };
             }
         }
 
+        async function saveApiKey() {
+            const input = document.getElementById('apiKeyInput');
+            const msg = document.getElementById('apiKeyVerifyMsg');
+            const apiKey = input.value.trim();
+            if (!apiKey) { alert('Por favor, introduce una API Key válida.'); return; }
+            msg.style.color = 'var(--text-secondary)';
+            msg.textContent = 'Verificando la clave con Gemini...';
+            const result = await validarApiKey(apiKey);
+            if (!result.ok) {
+                msg.style.color = '#dc2626';
+                msg.textContent = result.error;
+                return;
+            }
+            localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+            input.value = '';
+            msg.style.color = 'var(--health-text-color)';
+            msg.textContent = 'Clave verificada ✓';
+            if (result.warning) { alert(result.warning); }
+            initializeApp();
+        }
+
         // Guarda la clave pegada en "Ajustes avanzados" y actualiza el estado mostrado.
-        function saveApiKeyFromSettings() {
+        async function saveApiKeyFromSettings() {
             const field = document.getElementById('apiKeyField');
+            const msg = document.getElementById('apiKeyCheckMsg');
             const apiKey = field.value.trim();
-            if (apiKey) {
-                localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
-                field.value = '';
-                refreshApiKeyField();
-                alert('Clave guardada correctamente en este dispositivo.');
+            if (!apiKey) { alert('Por favor, pega una clave API válida.'); return; }
+            msg.style.color = 'var(--text-secondary)';
+            msg.textContent = 'Verificando la clave con Gemini...';
+            const result = await validarApiKey(apiKey);
+            if (!result.ok) {
+                msg.style.color = '#dc2626';
+                msg.textContent = result.error;
+                return; // la clave se queda en el campo para poder corregirla
+            }
+            localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+            field.value = '';
+            refreshApiKeyField();
+            if (result.warning) {
+                msg.style.color = 'var(--text-secondary)';
+                msg.textContent = '⚠️ ' + result.warning;
             } else {
-                alert('Por favor, pega una clave API válida.');
+                msg.style.color = 'var(--health-text-color)';
+                msg.textContent = 'Clave verificada y guardada en este dispositivo ✓';
             }
         }
 
@@ -1189,10 +1239,24 @@ Reglas obligatorias:
                 generationConfig: { responseMimeType: 'application/json', temperature: 0.4 }
             };
             const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) { const errorBody = await response.json(); throw new Error(`Error de la API de Gemini: ${errorBody.error.message}`); }
+            if (!response.ok) {
+                let detail = '';
+                try { const errorBody = await response.json(); detail = errorBody.error && errorBody.error.message ? errorBody.error.message : ''; } catch (e) { /* cuerpo no JSON */ }
+                if (response.status === 429) {
+                    throw new Error(`El servicio de Gemini está saturado o la cuota gratuita del modelo "${getModel()}" se agotó. Esperá unos minutos (la cuota se renueva) o elegí otro modelo en Ajustes avanzados.${detail ? ' Detalle: ' + detail : ''}`);
+                }
+                if (/API key not valid/i.test(detail)) {
+                    throw new Error('La clave API de Gemini no es válida (la API la rechazó). Reemplazala en Ajustes avanzados.');
+                }
+                throw new Error(`Error de la API de Gemini: ${detail || 'HTTP ' + response.status}`);
+            }
             const responseData = await response.json();
+            const candidate = responseData.candidates && responseData.candidates[0];
+            if (!candidate || !candidate.content || !candidate.content.parts) {
+                throw new Error('La API no devolvió una respuesta (cuota agotada o contenido bloqueado). Probá de nuevo en unos minutos o con otro modelo.');
+            }
             try {
-                const jsonText = responseData.candidates[0].content.parts[0].text;
+                const jsonText = candidate.content.parts[0].text;
                 const cleanedJsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
                 return JSON.parse(cleanedJsonText);
             } catch (e) { throw new Error("La respuesta de la IA no tenía el formato JSON esperado."); }

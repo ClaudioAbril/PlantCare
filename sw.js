@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'plantcare-gemini-v6';
+const CACHE_NAME = 'plantcare-gemini-v7';
 const urlsToCache = [
   './index.html',
   './GEMINI-plant_identifier_app.html',
