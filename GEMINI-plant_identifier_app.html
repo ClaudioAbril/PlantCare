@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlantCare v20260906 - Identificador y Curador de Plantas con Gemini</title>
+    <title>PlantCare v08/09/2026 - Identificador y Curador de Plantas con Gemini</title>
     <meta name="theme-color" content="#059669">
     <meta name="description" content="Identifica, diagnostica y cura tus plantas con IA de Gemini, con remedios caseros">
     <link rel="manifest" href="manifest.json">
@@ -738,7 +738,7 @@
     <div class="app-container">
         <header class="header">
             <div class="header-title">
-                <h1>🌿 PlantCare v20260906</h1>
+                <h1>🌿 PlantCare v08/09/2026</h1>
                 <p>Identifica, diagnostica y cura tus plantas con IA</p>
             </div>
             <div class="theme-switch-wrapper">
@@ -808,6 +808,11 @@
                 <label class="settings-label" for="modelSelect">Modelo de IA</label>
                 <select id="modelSelect" class="model-select"></select>
                 <p class="settings-hint">Todos los modelos de la lista tienen capa gratuita en la API de Gemini. "Gemini 3.8 Flash" es el más capaz de los gratuitos.</p>
+                <label class="settings-label" for="apiKeyField">Clave API de Gemini (token)</label>
+                <input type="password" id="apiKeyField" class="model-select" placeholder="Pega aquí tu clave API de Gemini" autocomplete="off">
+                <button class="btn btn-primary" onclick="saveApiKeyFromSettings()"
+                    style="margin-top: 0.75rem; width: 100%; padding: 0.75rem;">💾 Guardar Clave</button>
+                <p class="settings-hint" id="apiKeyStatus">La clave se guarda solo en este dispositivo.</p>
             </details>
         </div>
 
@@ -872,8 +877,36 @@
             }
         }
 
-        //function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); } // CFG
-        function getApiKey() { return 'AQ.Ab8RN6Jy7LwTWOHEYYevkOQmFIbGrRKQundPEhni38JlBaOVcg'; } // CFG
+        // Guarda la clave pegada en "Ajustes avanzados" y actualiza el estado mostrado.
+        function saveApiKeyFromSettings() {
+            const field = document.getElementById('apiKeyField');
+            const apiKey = field.value.trim();
+            if (apiKey) {
+                localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+                field.value = '';
+                refreshApiKeyField();
+                alert('Clave guardada correctamente en este dispositivo.');
+            } else {
+                alert('Por favor, pega una clave API válida.');
+            }
+        }
+
+        // Muestra el estado de la clave guardada sin revelar el token completo.
+        function refreshApiKeyField() {
+            const status = document.getElementById('apiKeyStatus');
+            if (!status) return;
+            const saved = getApiKey();
+            if (saved) {
+                status.textContent = `Clave guardada: ••••${saved.slice(-4)}. Pega una nueva clave y toca "Guardar Clave" para reemplazarla.`;
+            } else {
+                status.textContent = 'Todavía no hay clave guardada. Consigue una gratis en Google AI Studio y pégala aquí.';
+            }
+        }
+
+        // La clave ya no viene fija en el código (evita que Google la inhabilite
+        // por estar publicada en GitHub): se guarda en el dispositivo y se puede
+        // cambiar desde "Ajustes avanzados".
+        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
 
         function checkApiKey() {
             const apiKey = getApiKey();
@@ -1169,6 +1202,7 @@ Reglas obligatorias:
             const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light';
             applyTheme(savedTheme);
             populateModelSelect();
+            refreshApiKeyField();
             if (checkApiKey()) { loadHistory(); }
         }
 
