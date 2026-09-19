@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'plantcare-plantnet-v9';
+const CACHE_NAME = 'plantcare-plantnet-v10';
 const urlsToCache = [
   './index.html',
   './manifest.json',

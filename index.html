@@ -1152,6 +1152,275 @@
             } catch (e) { return null; }
         }
 
+        // Base local de remedios caseros en español, claveada por el nombre de la
+        // enfermedad/plaga que devuelve Pl@ntNet (lang=es). Pl@ntNet es una API de
+        // visión no generativa: solo identifica, no receta tratamientos, así que la
+        // app aporta los remedios desde acá. Las llaves van en minúsculas y SIN
+        // acentos porque la búsqueda normaliza el nombre antes de comparar.
+        const REMEDIOS_CASEROS = {
+            oidio: {
+                title: '🥛 Batido de bicarbonato contra oídio',
+                ingredients: ['1 cucharadita de bicarbonato de sodio', '1 litro de agua tibia', '2-3 gotas de jabón líquido suave'],
+                preparation: 'Disolvé el bicarbonato en el agua tibia y agregá el jabón para que la mezcla se adhiera a las hojas.',
+                application: 'Rociá ambas caras de las hojas al atardecer, cuando la planta no reciba sol directo.',
+                frequency: 'Cada 7 a 10 días, o después de cada lluvia, hasta que desaparezca el polvo blanco.',
+                warning: 'Retirá las hojas muy afectadas, mejorá la ventilación y evitá fertilizar con nitrógeno (estiércol, urea) porque favorece al hongo.'
+            },
+            mildiu: {
+                title: '🛡️ Bicarbonato y riego a la base contra mildiu',
+                ingredients: ['1 cucharadita de bicarbonato de potasio o sodio', '1 litro de agua', '1 gota de jabón líquido suave', 'Hidróxido de cobre (opcional, se consigue en viveros)'],
+                preparation: 'Mezclá el bicarbonato con el jabón en el agua. Si usás cobre, seguí la dosis del envase.',
+                application: 'Rociá las hojas (por arriba y por abajo) al atardecer y pasá a regar siempre a la base, sin mojar el follaje.',
+                frequency: 'Cada 7 días como preventivo; cada 5 días si la infección está activa.',
+                warning: 'El mildiu explota con la humedad: podá para airear, separá bien las plantas y evitá rociar el follaje por la noche.'
+            },
+            'moho gris': {
+                title: '✂️ Poda y bicarbonato contra botritis (moho gris)',
+                ingredients: ['Bisagra o tijera desinfectada con alcohol', '1 cucharadita de bicarbonato de sodio', '1 litro de agua', '2 gotas de jabón líquido suave'],
+                preparation: 'Prepará el rocío de bicarbonato con jabón. Desinfectá bien la tijera antes y después de podar.',
+                application: 'Retirá y descartá (no al compost) flores y hojas con el moho gris, y rociá el resto de la planta al atardecer.',
+                frequency: 'Podá cada vez que veas una flor marchita y rociá cada 7-10 días.',
+                warning: 'Botritis se extiende con el aire estancado y el riego nocturno: mejorá la ventilación y regá por la mañana.'
+            },
+            botritis: null, // alias de "moho gris"
+            botrytis: null, // alias de "moho gris"
+            'moho negruzco': {
+                title: '🧽 Lavado de hojas contra moho negruzco',
+                ingredients: ['1 cucharada de jabón líquido suave', '1 litro de agua', 'Paños o esponjas suaves'],
+                preparation: 'Diluí el jabón en el agua. Este moho aparece encima de la melaza que dejan pulgones y cochinillas, así que hay que atacar a esos insectos primero.',
+                application: 'Lavá las hojas por ambas caras con la solución jabonosa y controlá la plaga que lo provoca (ver su remedio).',
+                frequency: 'Lavado cada 5-7 días hasta que las hojas queden limpias.',
+                warning: 'El moho negruzco no mata la planta, pero le tapa la luz: si no controlás el insecto que lo alimenta, vuelve.'
+            },
+            oxido: {
+                title: '🍂 Poda y rocío de bicarbonato contra óxido',
+                ingredients: ['Tijera desinfectada', '1 cucharadita de bicarbonato de sodio', '1 litro de agua', '2 gotas de jabón líquido suave'],
+                preparation: 'Mezclá el bicarbonato con el jabón en el agua.',
+                application: 'Retirá y descartá las hojas con las pústulas anaranjadas y rociá el resto de la planta, por ambas caras, al atardecer.',
+                frequency: 'Cada 7-10 días mientras haya hojas afectadas.',
+                warning: 'Regá a la base: el óxido se propaga con el agua que queda en las hojas.'
+            },
+            roya: null, // alias de "oxido"
+            'pinta negra': {
+                title: '🌹 Bicarbonato y jabón contra pinta negra',
+                ingredients: ['1 cucharadita de bicarbonato de sodio', '1 litro de agua', '1 cucharadita de jabón líquido suave'],
+                preparation: 'Disolvé todo en el agua tibia y pasalo por un colador antes de usarlo.',
+                application: 'Rociá ambas caras de las hojas al atardecer, con énfasis en las hojas nuevas.',
+                frequency: 'Cada 7 días, y repetí después de cada lluvia.',
+                warning: 'Retirá las hojas caídas del suelo (allí vive el hongo) y regá siempre a la base, nunca sobre las hojas.'
+            },
+            antracnosis: {
+                title: '✂️ Poda y cobre contra antracnosis',
+                ingredients: ['Tijera desinfectada', 'Hidróxido de cobre (vivero) o bicarbonato de sodio', '1 litro de agua'],
+                preparation: 'Prepará el rocío con cobre según la dosis del envase, o 1 cucharadita de bicarbonato por litro con 2 gotas de jabón.',
+                application: 'Recortá y descartá hojas con manchas oscuras de borde y rociá el resto de la planta al atardecer.',
+                frequency: 'Cada 7-10 días mientras haya humedad alta.',
+                warning: 'Mejórala ventilación entre plantas y evitá el riego nocturno: la antracnosis necesita hojas mojadas para instalarse.'
+            },
+            tizon: {
+                title: '🚫 Cobre y riego a la base contra tizones',
+                ingredients: ['Hidróxido de cobre (vivero)', 'Tijera desinfectada', '1 litro de agua'],
+                preparation: 'Mezclá el cobre siguiendo la dosis del envase. No lo mezcles con bicarbonato ni con otros productos.',
+                application: 'Retirá y descartá hojas con manchas acaneladas o marchitez acuosa, y rociá el resto de la planta al atardecer.',
+                frequency: 'Cada 7-10 días, y siempre después de episodios de lluvia o humedad alta.',
+                warning: 'Los tizones (temprano y tardío) son graves en tomate, papa y afines: si avanzan rápido, descartá la planta para no contagiar al resto.'
+            },
+            pudricion: {
+                title: '🪴 Reposición de sustrato contra pudriciones',
+                ingredients: ['Sustrato nuevo con buen drenaje (mezcla con perlita o arena)', 'Tijera o cuchillo desinfectado', 'Canela en polvo (antifúngico natural)'],
+                preparation: 'Sacá la planta de la maceta, sacudí el sustrato viejo y cortá todas las raíces negras o blandas con herramienta desinfectada.',
+                application: 'Volvé a macetar con sustrato fresco y espolvoreá un poco de canela en la superficie del sustrato.',
+                frequency: 'Riego moderado: dejá secar los primeros centímetros entre riegos y controlá la recuperación cada semana.',
+                warning: 'La pudrición casi siempre viene de exceso de agua o maceta sin drenaje: si el tallo está blando y negro en la base, a veces ya no se salva.'
+            },
+            marchit: {
+                title: '🚱 Protocolo para marchitamientos (Verticillium/Fusarium)',
+                ingredients: ['Tijera desinfectada con alcohol', 'Sustrato nuevo', 'Maceta desinfectada o nueva'],
+                preparation: 'No hay remedio casero eficaz contra estos hongos del suelo: la estrategia es contener y evitar el contagio.',
+                application: 'Aislá la planta, podá las ramas marchitas, y si el marchitamiento persiste en pocas semanas, descartá la planta junto con todo su sustrato.',
+                frequency: 'Controlá a diario el avance de la marchitez (suele afectar solo un lado de la planta).',
+                warning: 'Desinfectá maceta y herramientas con alcohol o agua con cloro (1:10) antes de reusarlas, y elegí variedades resistentes la próxima vez.'
+            },
+            verticillium: null, // alias de "marchitamiento"
+            fusarium: null, // alias de "marchitamiento"
+            esclero: {
+                title: '✂️ Poda y aireación contra esclerotinia',
+                ingredients: ['Tijera desinfectada', '1 cucharadita de bicarbonato de sodio', '1 litro de agua', '2 gotas de jabón líquido suave'],
+                preparation: 'Prepará el rocío de bicarbonato con jabón.',
+                application: 'Retirá y descartá tallos y hojas con el moho blanco algodonoso o las esferas oscuras (esclerocios), y rociá el resto al atardecer.',
+                frequency: 'Cada 7-10 días mientras haya material afectado.',
+                warning: 'Quitá los esclerocios del sustrato superficial: sobreviven en el suelo y reinician la infección.'
+            },
+            bacteriana: {
+                title: '🧫 Contención de enfermedades bacterianas',
+                ingredients: ['Tijera desinfectada (alcohol o agua con cloro 1:10)', '1 litro de agua para enjuague'],
+                preparation: 'No existen remedios caseros que curen bacterias dentro de la planta: la estrategia es contener y no propagar.',
+                application: 'Retirá y descartá hojas con manchas acuosas o hundidas, desinfectando la herramienta entre corte y corte. No mojes el follaje.',
+                frequency: 'Inspección diaria; podá cada vez que aparezca una hoja nueva afectada.',
+                warning: 'El agua sobre las hojas multiplica las bacterias: regá a la base, evitá manipular la planta mojada y descartá (no compostes) el material enfermo.'
+            },
+            cancro: null, // alias de "bacteriana"
+            mosaico: {
+                title: '🦠 Contención de virus del mosaico',
+                ingredients: ['Tijera desinfectada', 'Trampas amarillas o jabón para pulgones'],
+                preparation: 'Los virus de plantas no tienen cura casera: el objetivo es sacar la planta del circulación y cortar el vector.',
+                application: 'Aislá la planta de inmediato. Si está muy deformada o con mosaico marcado, lo más responsable es descartarla. Controlá pulgones en todas las plantas vecinas.',
+                frequency: 'Revisión diaria de las plantas vecinas en busca de pulgones (los principales transmisores).',
+                warning: 'Desinfectá herramientas y manos: algunos virus se transmiten al tocar de una planta a otra. No uses semillas de la planta afectada.'
+            },
+            virus: null, // alias de "mosaico"
+            pulgon: {
+                title: '🐞 Jabón y chorro de agua contra pulgones',
+                ingredients: ['1 cucharada de jabón líquido suave', '1 litro de agua', 'Aceite de neem (opcional, vivero)'],
+                preparation: 'Diluí el jabón en el agua. El neem se usa como alternativa o refuerzo, según la dosis del envase.',
+                application: 'Primero un chorro de agua moderado para despegar la colonia, después rociá bien las puntas de los tallos y el envés de las hojas, donde se concentran.',
+                frequency: 'Cada 2-3 días hasta que no queden pulgones; después, una revisión semanal.',
+                warning: 'Fomentá a las mariquitas y crisopas: son el mejor control natural. Si la planta está muy poblada, repetí el lavado antes de rociar.'
+            },
+            'mosca blanca': {
+                title: '🟡 Trampas amarillas y jabón contra mosca blanca',
+                ingredients: ['Trampas adhesivas amarillas', '1 cucharada de jabón líquido suave', '1 litro de agua', 'Aceite de neem (opcional)'],
+                preparation: 'Colgá las trampas a la altura de la planta y prepará la solución jabonosa.',
+                application: 'Rociá el envés de las hojas (donde viven las ninfas) con la solución, con énfasis en la base de la planta.',
+                frequency: 'Rocío cada 3-4 días durante dos semanas; mantené las trampas hasta que dejen de capturar.',
+                warning: 'La mosca blanca vuela al menor movimiento: rociá con calma y, si la población es grande, repetí a los 3 días.'
+            },
+            acaro: {
+                title: '💦 Humedad y lavado contra ácaros',
+                ingredients: ['1 cucharada de jabón líquido suave', '1 litro de agua', 'Aceite de neem (opcional)', 'Pulverizador con atomización fina'],
+                preparation: 'Diluí el jabón (o el neem según el envase) en el agua.',
+                application: 'Los ácaros odian la humedad: duchá la planta con agua y rociá muy bien el envés de las hojas, donde tejen las telitas.',
+                frequency: 'Cada 2-3 días hasta cortar el ciclo; después, nebulizá agua sobre las hojas para mantener la humedad ambiental.',
+                warning: 'Revisá el envés de las hojas con lupa: las colonias jóvenes son las más fáciles de matar. El neem es el remedio casero más efectivo contra ácaros.'
+            },
+            arana: null, // alias de "acaro" (arañuelas)
+            cochinilla: {
+                title: '🧊 Alcohol y neem contra cochinillas',
+                ingredients: ['Alcohol en blanco (isopropílico)', 'Algodón o hisopos', '1 cucharada de jabón líquido suave', '1 litro de agua', 'Aceite de neem (opcional)'],
+                preparation: 'Para colonias pequeñas: humedecí algodón en alcohol. Para población grande: prepará jabón + agua (o neem según el envase).',
+                application: 'Pasa el algodón con alcohol directamente sobre cada cochinilla (el alcohol deshidrata su capa cerosa), y rociá el resto de la planta con la solución.',
+                frequency: 'Cada 3-4 días durante un mes: las ninfas eclosionan después, así que hay que repetir.',
+                warning: 'Revisá el envés de las hojas y las axilas de las ramas. Si la planta está muy cubierta de algodón blanco, descartá las hojas peor paradas.'
+            },
+            escama: null, // alias de "cochinilla" (escamas)
+            trips: {
+                title: '🟡 Trampas y jabón contra trips',
+                ingredients: ['Trampas adhesivas amarillas', '1 cucharada de jabón líquido suave', '1 litro de agua', 'Aceite de neem (opcional)'],
+                preparation: 'Colgá las trampas amarillas a la altura de las flores y prepará la solución jabonosa (o neem).',
+                application: 'Rociá flores, puntas de brotes y envés de las hojas, donde se alimentan los trips.',
+                frequency: 'Cada 3-4 días durante dos semanas; las trampas te indican si siguen activos.',
+                warning: 'Los trips dejan rayitas plateadas en las hojas y no tienen cura retroactiva: el objetivo es cortar la reproducción antes de que dañen los brotes nuevos.'
+            },
+            tripe: null, // alias de "trips"
+            minador: {
+                title: '✂️ Poda de hojas contra minadores',
+                ingredients: ['Tijera desinfectada', 'Bolsa o bolsa para descartar hojas'],
+                preparation: 'No hay rocío casero que mate la larva adentro de la hoja: la estrategia es interrumpir su ciclo.',
+                application: 'Retirá y descartá (dentro de una bolsa, no al compost) todas las hojas con los túneles serpenteantes, especialmente antes de que la larva se deje caer al sustrato.',
+                frequency: 'Revisión semanal y poda cada vez que aparezca una hoja nueva con túnel.',
+                warning: 'Dejá que los pájaros y las avispas parásitas trabajen: son el control natural más efectivo. En invernadero, elevá la temperatura si es posible: acelera el ciclo y favorece a los parasitoides.'
+            },
+            oruga: {
+                title: '🐛 Recolección manual y Bacillus thuringiensis',
+                ingredients: ['Guantes', 'Bacillus thuringiensis (BT, se consigue en viveros)', 'Tijera desinfectada'],
+                preparation: 'De noche o temprano, revisá el envés de las hojas y recogé las orugas a mano. El BT es una bacteria insecticida biológica, segura para personas y mascotas.',
+                application: 'Rociá con BT las hojas que estén comiendo, siguiendo la dosis del envase, para atrapar a las orugas recién nacidas.',
+                frequency: 'Recolección cada 2-3 días; rocío de BT cada 7-10 días mientras haya brotes tiernos.',
+                warning: 'Protegé las plantas nuevas con mallas finas: una sola oruga puede defoliar un brote joven en una noche.'
+            },
+            gusano: null, // alias de "oruga"
+            babosa: {
+                title: '🍺 Trampas de cerveza contra babosas y caracoles',
+                ingredients: ['Tarros o platos profundos', 'Cerveza', 'Cobre (tira o anillo, opcional)'],
+                preparation: 'Enterrá los tarros con la boca a ras del sustrato y llenalos de cerveza. De día, retirá a los visitantes a mano.',
+                application: 'Recolección manual al atardecer (salen con la humedad) + trampas de cerveza activas. El anillo de cobre alrededor de la maceta los repele.',
+                frequency: 'Recolección nocturna 2-3 veces por semana; cambiá la cerveza cuando se llene o se turbe.',
+                warning: 'En macetas elevadas, el problema casi desaparece: el riego encharcado y el sustrato húmedo son su autopista.'
+            },
+            caracol: null, // alias de "babosa"
+            saltamontes: {
+                title: '🥅 Malla y neem contra saltamontes',
+                ingredients: ['Malla fina para cubrir la planta', 'Aceite de neem (vivero)', 'Red o bandeja para recolección'],
+                preparation: 'Cubrí la planta con malla (es lo único que los detiene de verdad). El neem se usa como disuasorio en plantas descubiertas.',
+                application: 'De mañana temprano, sacudí la planta sobre una bandeja para recolectarlos, o rociá con neem las hojas tiernas.',
+                frequency: 'Recolección cada 2-3 días en épocas de invasion; malla permanente si el daño es recurrente.',
+                warning: 'Un saltamontes come su peso en hojas cada día: en invasión, la malla no es opcional.'
+            },
+            langosta: null, // alias de "saltamontes"
+            escarabajo: {
+                title: '🌙 Recolección nocturna contra escarabajos y gorgojos',
+                ingredients: ['Lámpara o linterna', 'Bandeja o recipiente con agua y jabón', 'Aceite de neem (opcional)'],
+                preparation: 'Los escarabajos se activan de noche: iluminá la planta y sacudila sobre la bandeja con agua jabonosa.',
+                application: 'Recolección manual nocturna; para los gorgojos (pequeños, con "cuello"), revisá los brotes nuevos y rociá con neem.',
+                frequency: 'Sesiones de recolección 2-3 veces por semana mientras haya daño.',
+                warning: 'Los gorgojos ponen en los brotes: retirá a mano los brotes con huevos visibles para cortar el ciclo.'
+            },
+            gorgojo: null, // alias de "escarabajo"
+            hormiga: {
+                title: '🍬 Cebo de bórax contra hormigas (con precaución)',
+                ingredients: ['1 cucharada de bórax (se consigue en ferreterías)', '3 cucharadas de azúcar', '1 taza de agua tibia', 'Algodón o hisopos'],
+                preparation: 'Disolvé el bórax en el agua tibia con el azúcar. Mojá algodón y colocalo en las entradas del nido o en el borde de la maceta.',
+                application: 'Las obreras llevan el cebo al nido. Si las hormigas están "criando" pulgones o cochinillas por la melaza, tratá también a esos insectos.',
+                frequency: 'Renová el cebo cada 3-4 días hasta que dejen de aparecer.',
+                warning: 'El bórax es tóxico para mascotas y niños: usalo solo en macetas elevadas o inaccesibles. Alternativa sin bórax: quitá la melaza (jabón) y limpiá el sustrato donde anidan.'
+            },
+            mosquito: {
+                title: '🏜️ Sustrato seco y trampas contra mosquitos del hongo',
+                ingredients: ['Trampas adhesivas amarillas', 'Canela en polvo', '1 litro de agua con unas gotas de jabón (opcional)'],
+                preparation: 'Dejá secar el sustrato entre riegos (los adultos salen del sustrato húmedo) y espolvoreá canela en la superficie.',
+                application: 'Colgá trampas amarillas a la altura de la planta. Si la población es grande, enjuagá el sustrato sumergiendo la maceta en agua jabonosa 2 minutos (el larva no sobrevive a la asfixia breve, pero la planta sí al baño).',
+                frequency: 'Trampas activas 2-3 semanas; riego más espaciado de forma permanente.',
+                warning: 'Este mosquito no pica ni daña la planta adulta: el problema real es el sustrato permanentemente húmedo, que también invita a pudriciones.'
+            },
+            'mosca de la fruta': {
+                title: '🍎 Vinagre y cobertura contra mosca de la fruta',
+                ingredients: ['Vinagre de manzana', '1 gota de jabón líquido', 'Frasco de cuello estrecho o trampa adhesiva', 'Malla fina o bolsitas de papel (opcional)'],
+                preparation: 'Colocá el frasco con vinagre y la gota de jabón cerca de la planta (el jabón hace que la mosca se hunda). Retirá y descartá cualquier fruto caído o perforado.',
+                application: 'Cubrí los frutos con malla o bolsitas de papel y controlá la trampa todos los días.',
+                frequency: 'Cambiá el vinagre cada 3-4 días mientras la trampa siga capturando moscas.',
+                warning: 'La larva se desarrolla dentro del fruto: un solo fruto perforado puede producir cientos de moscas, así que la higiene del suelo alrededor es clave.'
+            }
+        };
+        // Los alias (valor null) apuntan a la tarjeta de la llave indicada.
+        REMEDIOS_CASEROS.botritis = REMEDIOS_CASEROS['moho gris'];
+        REMEDIOS_CASEROS.botrytis = REMEDIOS_CASEROS['moho gris'];
+        REMEDIOS_CASEROS.roya = REMEDIOS_CASEROS.oxido;
+        REMEDIOS_CASEROS.verticillium = REMEDIOS_CASEROS.marchit;
+        REMEDIOS_CASEROS.fusarium = REMEDIOS_CASEROS.marchit;
+        REMEDIOS_CASEROS.cancro = REMEDIOS_CASEROS.bacteriana;
+        REMEDIOS_CASEROS.virus = REMEDIOS_CASEROS.mosaico;
+        REMEDIOS_CASEROS.arana = REMEDIOS_CASEROS.acaro;
+        REMEDIOS_CASEROS.escama = REMEDIOS_CASEROS.cochinilla;
+        REMEDIOS_CASEROS.tripe = REMEDIOS_CASEROS.trips;
+        REMEDIOS_CASEROS.gusano = REMEDIOS_CASEROS.oruga;
+        REMEDIOS_CASEROS.caracol = REMEDIOS_CASEROS.babosa;
+        REMEDIOS_CASEROS.langosta = REMEDIOS_CASEROS.saltamontes;
+        REMEDIOS_CASEROS.gorgojo = REMEDIOS_CASEROS.escarabajo;
+        REMEDIOS_CASEROS.mancha = REMEDIOS_CASEROS['pinta negra'];
+        REMEDIOS_CASEROS.podredumbre = REMEDIOS_CASEROS.pudricion;
+
+        // Busca el remedio casero para una enfermedad: normaliza el nombre
+        // (minúsculas, sin acentos) y lo compara contra las llaves de
+        // REMEDIOS_CASEROS. Si no hay receta específica, devuelve una tarjeta
+        // genérica de primeros auxilios para que siempre haya algo útil.
+        function obtenerRemedioCasero(enfermedad) {
+            const norm = (enfermedad || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            for (const clave of Object.keys(REMEDIOS_CASEROS)) {
+                if (norm.includes(clave)) {
+                    return Object.assign({}, REMEDIOS_CASEROS[clave], { treats: enfermedad });
+                }
+            }
+            return {
+                title: '🧪 Primeros auxilios para ' + enfermedad,
+                treats: enfermedad,
+                ingredients: ['agua', 'jabón líquido suave', 'alcohol en blanco (opcional)'],
+                preparation: 'No hay una receta casera específica para este problema en la app, así que aplicá el protocolo general: aislá la planta y limpiá las zonas afectadas.',
+                application: 'Retirá y descartá las hojas o partes muy dañadas, limpiá el resto con un paño húmedo (o con alcohol diluido 1:1 si son insectos blandos) y rociá una solución de 1 cucharada de jabón suave por litro de agua por ambas caras de las hojas.',
+                frequency: 'Repetí el lavado cada 3 a 4 días y revisá la planta a diario durante una semana.',
+                warning: 'Si el problema no mejora en una semana o se extiende a otras plantas, llevá una muestra a un vivero o consultá a un especialista para el tratamiento adecuado.'
+            };
+        }
+
         // Identifica la planta con Pl@ntNet haciendo DOS llamadas:
         //  1) /v2/identify/{project}  -> especie (nombre común, científico, familia, confianza)
         //  2) /v2/diseases/identify   -> enfermedades/plagas detectadas (nombre, descripción, confianza)
@@ -1276,7 +1545,7 @@
                 health, healthIcon, severity, confidence,
                 identification,
                 problems,
-                homeRemedies: [], // Pl@ntNet no genera remedios caseros
+                homeRemedies: topDisease ? meaningfulDiseases.slice(0, 3).map(d => obtenerRemedioCasero(d.name)) : [], // base local de remedios caseros (Pl@ntNet no los genera)
                 wellnessTips,
                 recommendations,
                 // Datos extra de Pl@ntNet (no se muestran en el cuerpo principal).
