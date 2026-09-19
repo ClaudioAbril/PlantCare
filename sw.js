@@ -1,8 +1,7 @@
 
-const CACHE_NAME = 'plantcare-plantnet-v8';
+const CACHE_NAME = 'plantcare-plantnet-v9';
 const urlsToCache = [
   './index.html',
-  './GEMINI-plant_identifier_app.html',
   './manifest.json',
   './icons/icon-48.png',
   './icons/icon-96.png',
