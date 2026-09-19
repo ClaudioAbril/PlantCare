@@ -1,9 +1,14 @@
 
-const CACHE_NAME = 'plantcare-gemini-v7';
+const CACHE_NAME = 'plantcare-plantnet-v8';
 const urlsToCache = [
   './index.html',
   './GEMINI-plant_identifier_app.html',
-  './manifest.json'
+  './manifest.json',
+  './icons/icon-48.png',
+  './icons/icon-96.png',
+  './icons/icon-128.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 // Evento de instalación: se abre el caché y se añaden los archivos principales.

@@ -1,8 +1,8 @@
 
 {
-  "name": "PlantCare con Gemini",
+  "name": "PlantCare con Pl@ntNet",
   "short_name": "PlantCare",
-  "description": "Identifica y cuida tus plantas con IA de Gemini.",
+  "description": "Identifica especies y detecta enfermedades de tus plantas con Pl@ntNet.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#764ba2",
@@ -10,27 +10,27 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://www.gstatic.com/images/branding/product/1x/gemini_48dp.png",
+      "src": "./icons/icon-48.png",
       "type": "image/png",
       "sizes": "48x48"
     },
     {
-      "src": "https://www.gstatic.com/images/branding/product/1x/gemini_96dp.png",
+      "src": "./icons/icon-96.png",
       "type": "image/png",
       "sizes": "96x96"
     },
     {
-      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_128dp.png",
+      "src": "./icons/icon-128.png",
       "type": "image/png",
       "sizes": "128x128"
     },
     {
-      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_192dp.png",
+      "src": "./icons/icon-192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://www.gstatic.com/images/branding/product/2x/gemini_512dp.png",
+      "src": "./icons/icon-512.png",
       "type": "image/png",
       "sizes": "512x512"
     }

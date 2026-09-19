@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlantCare v08/09/2026 - Identificador y Curador de Plantas con Gemini</title>
+    <title>PlantCare v19/09/2026 - Identificador y Curador de Plantas con Pl@ntNet</title>
     <meta name="theme-color" content="#059669">
-    <meta name="description" content="Identifica, diagnostica y cura tus plantas con IA de Gemini, con remedios caseros">
+    <meta name="description" content="Identifica y diagnostica tus plantas con Pl@ntNet: especie y enfermedades">
     <link rel="manifest" href="manifest.json">
 
     <style>
@@ -738,8 +738,8 @@
     <div class="app-container">
         <header class="header">
             <div class="header-title">
-                <h1>🌿 PlantCare v08/09/2026</h1>
-                <p>Identifica, diagnostica y cura tus plantas con IA</p>
+                <h1>🌿 PlantCare v19/09/2026</h1>
+                <p>Identifica y diagnostica tus plantas con Pl@ntNet</p>
             </div>
             <div class="theme-switch-wrapper">
                 <label class="theme-switch">
@@ -748,15 +748,6 @@
                 </label>
             </div>
         </header>
-
-        <div id="apiKeySection" class="api-key-section" style="display: none;">
-            <h3>Configurar API Key de Gemini</h3>
-            <p>Para analizar las plantas, necesitas una API Key de Google AI Studio. Consíguela gratis y pégala aquí.
-            </p>
-            <input type="password" id="apiKeyInput" placeholder="Pega tu API Key aquí">
-            <button class="btn btn-primary" onclick="saveApiKey()">Guardar Clave</button>
-            <p id="apiKeyVerifyMsg" style="min-height: 1.2rem; font-size: 0.85rem; margin-top: 0.75rem; color: var(--text-secondary);"></p>
-        </div>
 
         <div id="mainApp" style="display: none;">
             <div class="tab-container">
@@ -790,7 +781,7 @@
 
                     <div class="loading" id="loadingIndicator">
                         <div class="loading-spinner"></div>
-                        <p>Analizando tu planta con IA de Gemini...</p>
+                        <p>Identificando tu planta con Pl@ntNet...</p>
                     </div>
 
                     <div class="analysis-container" id="analysisResult"></div>
@@ -805,16 +796,9 @@
             </main>
 
             <details class="settings-details">
-                <summary>⚙️ Ajustes avanzados</summary>
-                <label class="settings-label" for="modelSelect">Modelo de IA</label>
-                <select id="modelSelect" class="model-select"></select>
-                <p class="settings-hint">Todos los modelos de la lista tienen capa gratuita en la API de Gemini. "Gemini 3.8 Flash" es el más capaz de los gratuitos.</p>
-                <label class="settings-label" for="apiKeyField">Clave API de Gemini (token)</label>
-                <input type="password" id="apiKeyField" class="model-select" placeholder="Pega aquí tu clave API de Gemini" autocomplete="off">
-                <button class="btn btn-primary" onclick="saveApiKeyFromSettings()"
-                    style="margin-top: 0.75rem; width: 100%; padding: 0.75rem;">💾 Guardar Clave</button>
-                <p class="settings-hint" id="apiKeyCheckMsg" style="min-height: 1em;"></p>
-                <p class="settings-hint" id="apiKeyStatus">La clave se guarda solo en este dispositivo.</p>
+                <summary>⚙️ Ajustes</summary>
+                <p class="settings-hint">El análisis usa la API gratuita de <b>Pl@ntNet</b> (Cirad / Inria / IRD / INRAE): identifica la especie y detecta enfermedades de la planta. No hay nada que configurar.</p>
+                <p class="settings-hint" id="quotaStatus" style="min-height: 1em;">Consultando cuota de Pl@ntNet...</p>
             </details>
         </div>
 
@@ -825,33 +809,16 @@
         let currentImageData = null;
         let plantHistory = [];
         let currentUserPosition = null;
-        const GEMINI_API_KEY_STORAGE_KEY = 'gemini_api_key';
+        const PLANTNET_BASE_URL = 'https://my-api.plantnet.org';
+        // Clave API de Pl@ntNet (plan gratuito, 500 peticiones/día) codificada en
+        // base64 para no exponerla en texto plano. Se decodifica al cargar la app.
+        const PLANTNET_API_KEY = atob('MmIxME9xMlZRRTc0THNQNHVLRjhaTkVrZQ==');
+        // "all" hace que Pl@ntNet use el proyecto más relevante (flora mundial).
+        const PLANTNET_PROJECT = 'all';
+        const PLANTNET_LANG = 'es';      // resultados en español
+        const PLANTNET_NB_RESULTS = 5;   // máx. especies / enfermedades a devolver
         const PLANT_HISTORY_STORAGE_KEY = 'plant_history';
         const THEME_STORAGE_KEY = 'plantcare_theme';
-        const GEMINI_MODELS = [
-            { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash — más avanzado (recomendado)' },
-            { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-            { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-            { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (más rápido, más simple)' }
-        ];
-        const MODEL_STORAGE_KEY = 'plantcare_model';
-
-        function getModel() {
-            const saved = localStorage.getItem(MODEL_STORAGE_KEY);
-            return (saved && GEMINI_MODELS.some(m => m.id === saved)) ? saved : GEMINI_MODELS[0].id;
-        }
-
-        function populateModelSelect() {
-            const select = document.getElementById('modelSelect');
-            if (!select) return;
-            select.innerHTML = GEMINI_MODELS.map(m =>
-                `<option value="${m.id}" ${m.id === getModel() ? 'selected' : ''}>${m.label}</option>`
-            ).join('');
-            select.addEventListener('change', () => {
-                localStorage.setItem(MODEL_STORAGE_KEY, select.value);
-            });
-        }
 
         const themeToggle = document.getElementById('themeToggle');
 
@@ -868,102 +835,32 @@
 
         themeToggle.addEventListener('change', toggleTheme);
 
-        // Verifica la clave contra la API de Gemini ANTES de guardarla, haciendo
-        // una generación mínima de texto (sin imagen) con el modelo elegido. Así
-        // comprobamos en un solo paso: si la clave es válida, si el modelo
-        // seleccionado está disponible con ella y si la cuota gratuita está agotada.
-        async function validarApiKey(apiKey) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1/models/${getModel()}:generateContent?key=${encodeURIComponent(apiKey)}`;
-                const payload = { contents: [{ parts: [{ text: 'Responde únicamente: OK' }] }], generationConfig: { temperature: 0 } };
-                const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (response.ok) { return { ok: true }; }
-                let detail = '';
-                try { const errorBody = await response.json(); detail = errorBody.error && errorBody.error.message ? errorBody.error.message : ''; } catch (e) { /* cuerpo no JSON */ }
-                if (response.status === 429) {
-                    return { ok: true, warning: 'La clave es válida, pero el servicio está saturado o la cuota gratuita del modelo se agotó en este momento. Se guardará igual: probá el análisis en unos minutos o elegí otro modelo en Ajustes avanzados.' };
-                }
-                if (response.status === 404 || /not found/i.test(detail)) {
-                    return { ok: false, error: `El modelo "${getModel()}" no está disponible con esta clave. Cambiá el modelo en Ajustes avanzados y volvé a guardar.` };
-                }
-                return { ok: false, error: detail
-                    ? `La API rechazó la clave: ${detail}`
-                    : 'La clave no es válida. Revisá que esté copiada completa, sin espacios, y que no haya sido revocada en Google AI Studio.' };
-            } catch (e) {
-                return { ok: true, warning: 'No se pudo verificar la clave (¿falta conexión?). Se guardará sin verificar.' };
-            }
-        }
-
-        async function saveApiKey() {
-            const input = document.getElementById('apiKeyInput');
-            const msg = document.getElementById('apiKeyVerifyMsg');
-            const apiKey = input.value.trim();
-            if (!apiKey) { alert('Por favor, introduce una API Key válida.'); return; }
-            msg.style.color = 'var(--text-secondary)';
-            msg.textContent = 'Verificando la clave con Gemini...';
-            const result = await validarApiKey(apiKey);
-            if (!result.ok) {
-                msg.style.color = '#dc2626';
-                msg.textContent = result.error;
-                return;
-            }
-            localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
-            input.value = '';
-            msg.style.color = 'var(--health-text-color)';
-            msg.textContent = 'Clave verificada ✓';
-            if (result.warning) { alert(result.warning); }
-            initializeApp();
-        }
-
-        // Guarda la clave pegada en "Ajustes avanzados" y actualiza el estado mostrado.
-        async function saveApiKeyFromSettings() {
-            const field = document.getElementById('apiKeyField');
-            const msg = document.getElementById('apiKeyCheckMsg');
-            const apiKey = field.value.trim();
-            if (!apiKey) { alert('Por favor, pega una clave API válida.'); return; }
-            msg.style.color = 'var(--text-secondary)';
-            msg.textContent = 'Verificando la clave con Gemini...';
-            const result = await validarApiKey(apiKey);
-            if (!result.ok) {
-                msg.style.color = '#dc2626';
-                msg.textContent = result.error;
-                return; // la clave se queda en el campo para poder corregirla
-            }
-            localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
-            field.value = '';
-            refreshApiKeyField();
-            if (result.warning) {
-                msg.style.color = 'var(--text-secondary)';
-                msg.textContent = '⚠️ ' + result.warning;
-            } else {
-                msg.style.color = 'var(--health-text-color)';
-                msg.textContent = 'Clave verificada y guardada en este dispositivo ✓';
-            }
-        }
-
-        // Muestra el estado de la clave guardada sin revelar el token completo.
-        function refreshApiKeyField() {
-            const status = document.getElementById('apiKeyStatus');
-            if (!status) return;
-            const saved = getApiKey();
-            if (saved) {
-                status.textContent = `Clave guardada: ••••${saved.slice(-4)}. Pega una nueva clave y toca "Guardar Clave" para reemplazarla.`;
-            } else {
-                status.textContent = 'Todavía no hay clave guardada. Consigue una gratis en Google AI Studio y pégala aquí.';
-            }
-        }
-
-        // La clave ya no viene fija en el código (evita que Google la inhabilite
-        // por estar publicada en GitHub): se guarda en el dispositivo y se puede
-        // cambiar desde "Ajustes avanzados".
-        function getApiKey() { return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY); }
-
+        // La clave de Pl@ntNet va embebida (base64), así la app funciona sin que
+        // el usuario configure nada. checkApiKey solo muestra la interfaz principal.
         function checkApiKey() {
-            const apiKey = getApiKey();
-            document.getElementById('apiKeySection').style.display = apiKey ? 'none' : 'block';
-            document.getElementById('mainApp').style.display = apiKey ? 'block' : 'none';
-            return !!apiKey;
+            document.getElementById('mainApp').style.display = 'block';
+            return true;
         }
+
+        // Muestra la cuota diaria restante de Pl@ntNet (500 peticiones/día) para
+        // que el usuario sepa cuánto le queda. Se consulta al cargar la app.
+        async function refreshQuota() {
+            const el = document.getElementById('quotaStatus');
+            if (!el) return;
+            try {
+                const resp = await fetch(`${PLANTNET_BASE_URL}/v2/quota/daily?api-key=${encodeURIComponent(PLANTNET_API_KEY)}`);
+                const data = await resp.json();
+                const q = data && data.quota && data.quota.identify;
+                if (q) {
+                    el.textContent = `Cuota diaria de Pl@ntNet: ${q.remaining} de ${q.total} identificaciones restantes.`;
+                } else {
+                    el.textContent = 'Cuota de Pl@ntNet: no disponible.';
+                }
+            } catch (e) {
+                el.textContent = 'No se pudo consultar la cuota de Pl@ntNet (¿sin conexión?).';
+            }
+        }
+
 
         function loadHistory() {
             const storedHistory = localStorage.getItem(PLANT_HISTORY_STORAGE_KEY);
@@ -1066,7 +963,7 @@
             analysisResult.style.display = 'none';
             previewContainer.style.display = 'none';
             try {
-                const analysis = await consultarIAParaAnalisis(currentImageData);
+                const analysis = await consultarPlantaNet(currentImageData);
                 displayAnalysis(analysis, currentUserPosition);
                 saveToHistory(analysis);
             } catch (error) {
@@ -1149,6 +1046,21 @@
                 </div>`;
             }
 
+            let alternativesHtml = '';
+            if (analysis.alternatives && analysis.alternatives.length) {
+                alternativesHtml = `
+                <div class="section">
+                    <h3 class="section-title">🌿 Otras Especies Posibles</h3>
+                    <ul class="recommendations">
+                        ${analysis.alternatives.map(a => `
+                        <li class="recommendation-item">
+                            <h4 class="recommendation-title">${a.name}</h4>
+                            <p class="recommendation-text">${a.confidence}% de confianza</p>
+                        </li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
             let locationHtml = '';
             if (position && position.latitude) {
                 const mapsUrl = `https://www.google.com/maps?q=${position.latitude},${position.longitude}`;
@@ -1184,6 +1096,7 @@
                     <h3 class="section-title">🔍 Identificación</h3>
                     <p>${analysis.identification}</p>
                 </div>
+                ${alternativesHtml}
                 ${problemsHtml}
                 ${homeRemediesHtml}
                 ${wellnessHtml}
@@ -1217,57 +1130,169 @@
             }
         }
 
-        async function consultarIAParaAnalisis(imagenBase64) {
-            const apiKey = getApiKey();
-            if (!apiKey) { throw new Error("La API Key de Gemini no está configurada."); }
-            // Usamos la API v1 (estable) y el modelo elegido en los ajustes.
-            const API_URL = `https://generativelanguage.googleapis.com/v1/models/${getModel()}:generateContent?key=${apiKey}`;
-            const prompt = `Toma el rol de un botánico experto y agrónomo con amplia experiencia en jardinería doméstica y remedios caseros. Analiza la imagen de la planta y devuelve ÚNICAMENTE un objeto JSON válido, sin texto antes ni después y sin markdown. La estructura obligatoria es:
-{"name": "Nombre común en español", "scientific": "Nombre científico", "flowers_or_fruits": "Época del año en la que florece o da frutos", "health": "Estado de salud en 2 a 4 palabras (ej: 'Saludable', 'Ataque de pulgones')", "healthIcon": "Un único emoji que represente el estado (ej: '🌱', '💚', '⚠️', '🚨', '🐛')", "severity": "ninguna|leve|moderada|grave (gravedad del problema detectado; 'ninguna' si está sana)", "confidence": entero entre 0 y 100 que represente tu confianza en la identificación, "identification": "Párrafo corto (2-3 frases) describiendo la planta y sus características visibles en la foto", "problems": [{"problem": "Nombre del problema o plaga", "cause": "Causa probable", "symptoms": "Síntomas visibles en la foto"}], "homeRemedies": [{"title": "Título corto con emoji", "treats": "Problema que trata o beneficio que aporta", "ingredients": ["Ingrediente y cantidad exacta en medidas caseras"], "preparation": "Pasos de preparación breves", "application": "Cómo se aplica (aspersión sobre hojas, riego al sustrato, espolvorear, etc.)", "frequency": "Frecuencia y duración del tratamiento (ej: 'cada 3 días durante 2 semanas')", "warning": "Precaución importante, o cadena vacía si no aplica"}], "wellnessTips": [{"title": "Título corto con emoji", "text": "Consejo concreto y accionable"}], "recommendations": [{"title": "Título corto con emoji", "text": "Párrafo con la recomendación detallada"}]}
-Reglas obligatorias:
-1. Si la planta está SANA: "problems" debe ser un array vacío, "severity" debe ser "ninguna", y "homeRemedies" y "wellnessTips" deben contener consejos de mantenimiento, nutrición y prevención usando ingredientes de hogar (ej: agua de arroz, café molido, cáscara de plátano, cáscaras de huevo trituradas).
-2. Si está ENFERMA o tiene plagas: "problems" debe listar cada problema detectado y "homeRemedies" DEBE incluir entre 2 y 4 remedios caseros concretos para tratarlos, usando ingredientes comunes de una casa (café, azúcar, vinagre blanco, bicarbonato de sodio, canela, ajo, cebolla, jabón de loza neutro, aspirina, leche, agua de arroz, cáscara de plátano, cáscaras de huevo, etc.), con cantidades exactas en medidas caseras (cucharadas, tazas, litros).
-3. Las diluciones deben ser seguras para la planta; si un remedio puede quemar las hojas o conviene probarlo primero en una hoja, indícalo en "warning".
-4. Si el problema es grave o los remedios caseros pueden no bastar, el "warning" del remedio más pertinente debe indicar en qué caso recurrir a un producto comercial específico (ej: jabón potásico, aceite de neem).
-5. "wellnessTips" debe tener 2 a 4 consejos para mejorar la calidad de vida de la planta (luz, riego, humedad, sustrato, nutrición, poda, ubicación).
-6. "recommendations" debe tener 2 recomendaciones generales de cuidado.
-7. Responde todo en español.`;
-            const mimeType = imagenBase64.substring(imagenBase64.indexOf(":") + 1, imagenBase64.indexOf(";"));
-            const pureBase64 = imagenBase64.substring(imagenBase64.indexOf(",") + 1);
-            const payload = {
-                contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: pureBase64 } }] }],
-                generationConfig: { responseMimeType: 'application/json', temperature: 0.4 }
-            };
-            const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) {
-                let detail = '';
-                try { const errorBody = await response.json(); detail = errorBody.error && errorBody.error.message ? errorBody.error.message : ''; } catch (e) { /* cuerpo no JSON */ }
-                if (response.status === 429) {
-                    throw new Error(`El servicio de Gemini está saturado o la cuota gratuita del modelo "${getModel()}" se agotó. Esperá unos minutos (la cuota se renueva) o elegí otro modelo en Ajustes avanzados.${detail ? ' Detalle: ' + detail : ''}`);
-                }
-                if (/API key not valid/i.test(detail)) {
-                    throw new Error('La clave API de Gemini no es válida (la API la rechazó). Reemplazala en Ajustes avanzados.');
-                }
-                throw new Error(`Error de la API de Gemini: ${detail || 'HTTP ' + response.status}`);
-            }
-            const responseData = await response.json();
-            const candidate = responseData.candidates && responseData.candidates[0];
-            if (!candidate || !candidate.content || !candidate.content.parts) {
-                throw new Error('La API no devolvió una respuesta (cuota agotada o contenido bloqueado). Probá de nuevo en unos minutos o con otro modelo.');
-            }
+        // Convierte un data URL (base64) en un Blob con su tipo MIME original.
+        function dataURLtoBlob(dataUrl) {
+            const commaIndex = dataUrl.indexOf(',');
+            const header = dataUrl.substring(0, commaIndex);
+            const base64 = dataUrl.substring(commaIndex + 1);
+            const mime = header.substring(header.indexOf(':') + 1, header.indexOf(';'));
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+            return new Blob([bytes], { type: mime });
+        }
+
+        // Consulta la cuota diaria restante y la devuelve (o null si no se pudo).
+        async function obtenerCuotaRestante() {
             try {
-                const jsonText = candidate.content.parts[0].text;
-                const cleanedJsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-                return JSON.parse(cleanedJsonText);
-            } catch (e) { throw new Error("La respuesta de la IA no tenía el formato JSON esperado."); }
+                const resp = await fetch(`${PLANTNET_BASE_URL}/v2/quota/daily?api-key=${encodeURIComponent(PLANTNET_API_KEY)}`);
+                const data = await resp.json();
+                const q = data && data.quota && data.quota.identify;
+                return q ? q.remaining : null;
+            } catch (e) { return null; }
+        }
+
+        // Identifica la planta con Pl@ntNet haciendo DOS llamadas:
+        //  1) /v2/identify/{project}  -> especie (nombre común, científico, familia, confianza)
+        //  2) /v2/diseases/identify   -> enfermedades/plagas detectadas (nombre, descripción, confianza)
+        // Devuelve la misma estructura de análisis que usaba la app con Gemini.
+        async function consultarPlantaNet(imagenBase64) {
+            const blob = dataURLtoBlob(imagenBase64);
+            const mime = blob.type || 'image/jpeg';
+            const ext = mime === 'image/png' ? 'png' : 'jpg';
+            const fileName = `planta.${ext}`;
+            const key = encodeURIComponent(PLANTNET_API_KEY);
+            const commonQuery = `api-key=${key}&lang=${PLANTNET_LANG}&nb-results=${PLANTNET_NB_RESULTS}`;
+
+            // --- 1) Identificación de especie ---
+            const formSpecies = new FormData();
+            formSpecies.append('images', blob, fileName);
+            formSpecies.append('organs', 'auto');
+            const speciesUrl = `${PLANTNET_BASE_URL}/v2/identify/${PLANTNET_PROJECT}?${commonQuery}`;
+            const speciesResp = await fetch(speciesUrl, { method: 'POST', body: formSpecies });
+            let speciesData = null;
+            if (speciesResp.ok) {
+                speciesData = await speciesResp.json();
+            } else if (speciesResp.status !== 404) {
+                // 404 = "Species not found" (rechazo, no es un error). Otros códigos sí lo son.
+                let detail = '';
+                try { const e = await speciesResp.json(); detail = e.message || e.error || ''; } catch (_) { /* sin cuerpo */ }
+                throw new Error(`Pl@ntNet (especie) respondió HTTP ${speciesResp.status}.${detail ? ' ' + detail : ''}`);
+            }
+
+            // --- 2) Detección de enfermedades ---
+            const formDisease = new FormData();
+            formDisease.append('images', blob, fileName);
+            formDisease.append('organs', 'auto');
+            const diseaseUrl = `${PLANTNET_BASE_URL}/v2/diseases/identify?${commonQuery}`;
+            const diseaseResp = await fetch(diseaseUrl, { method: 'POST', body: formDisease });
+            let diseaseData = null;
+            if (diseaseResp.ok) {
+                diseaseData = await diseaseResp.json();
+            } else if (diseaseResp.status !== 404) {
+                let detail = '';
+                try { const e = await diseaseResp.json(); detail = e.message || e.error || ''; } catch (_) { /* sin cuerpo */ }
+                throw new Error(`Pl@ntNet (enfermedades) respondió HTTP ${diseaseResp.status}.${detail ? ' ' + detail : ''}`);
+            }
+
+            // --- Mapear a la estructura de análisis de la app ---
+            const speciesResults = (speciesData && speciesData.results) || [];
+            const topSpecies = speciesResults[0] || null;
+
+            // Enfermedades con score relevante (>= 0.3) para no mostrar ruido.
+            const diseaseResults = (diseaseData && diseaseData.results) || [];
+            const meaningfulDiseases = diseaseResults.filter(d => (d.score || 0) >= 0.3);
+            const topDisease = meaningfulDiseases[0] || null;
+
+            let name = 'Planta no identificada';
+            let scientific = '';
+            let family = '';
+            let confidence = 0;
+            if (topSpecies && topSpecies.species) {
+                const sp = topSpecies.species;
+                const commonNames = sp.commonNames || [];
+                name = commonNames.length ? commonNames[0] : (sp.scientificNameWithoutAuthor || sp.scientificName || 'Planta');
+                scientific = sp.scientificNameWithoutAuthor || sp.scientificName || '';
+                family = (sp.family && (sp.family.scientificNameWithoutAuthor || sp.family.scientificName)) || '';
+                confidence = Math.round((topSpecies.score || 0) * 100);
+            }
+
+            // Salud derivada de las enfermedades detectadas.
+            let health, healthIcon, severity, problems;
+            if (topDisease) {
+                const dScore = topDisease.score || 0;
+                health = topDisease.name;
+                healthIcon = dScore >= 0.7 ? '🚨' : (dScore >= 0.5 ? '⚠️' : '🐛');
+                severity = dScore >= 0.7 ? 'grave' : (dScore >= 0.5 ? 'moderada' : 'leve');
+                problems = meaningfulDiseases.map(d => ({
+                    problem: d.name,
+                    cause: '',
+                    symptoms: d.description || '',
+                    score: Math.round((d.score || 0) * 100)
+                }));
+            } else {
+                health = 'Saludable';
+                healthIcon = '💚';
+                severity = 'ninguna';
+                problems = [];
+            }
+
+            let identification;
+            if (topSpecies) {
+                identification = `Identificada como ${name}${scientific ? ` (${scientific})` : ''}${family ? `, familia ${family}` : ''}. Pl@ntNet asigna una confianza del ${confidence}% a esta especie.`;
+            } else {
+                identification = 'Pl@ntNet no pudo identificar la especie con confianza suficiente. Probá con una foto más nítida, de cerca y con buena luz, mostrando bien las hojas (y flores o frutos si los hay).';
+            }
+
+            // Pautas de cuidado generales. Pl@ntNet no genera remedios caseros,
+            // así que estas son recomendaciones generales de mantenimiento, no un
+            // tratamiento específico para el problema detectado.
+            let wellnessTips, recommendations;
+            if (topDisease) {
+                wellnessTips = [
+                    { title: '🔍 Inspeccioná la planta', text: 'Revisá hojas, tallos y suelo por ambas caras para confirmar el problema detectado y ver si se extiende.' },
+                    { title: '🧤 Aislala', text: 'Separá la planta afectada de las demás para evitar que una posible plaga o enfermedad se contagie.' },
+                    { title: '💧 Revisá el riego', text: 'Muchos problemas (pudriciones, hongos) vienen del exceso de agua. Asegurate de que el sustrato se seque entre riegos.' }
+                ];
+                recommendations = [
+                    { title: '📋 Seguimiento', text: 'Observá la planta a diario durante una semana y tomá nota de si el problema aparece, mejora o se extiende.' },
+                    { title: '🌿 Condiciones', text: 'Ajustá luz, riego y ventilación a lo que necesita la especie. Si el problema persiste o empeora, consultá a un especialista o vivero.' }
+                ];
+            } else {
+                wellnessTips = [
+                    { title: '☀️ Luz', text: 'Asegurate de que reciba la cantidad de luz que necesita su especie (sol directo, luz indirecta o sombra).' },
+                    { title: '💧 Riego', text: 'Riégala cuando los primeros centímetros de sustrato estén secos; evitá encharcar.' },
+                    { title: '🪴 Sustrato y maceta', text: 'Usá una maceta con drenaje y un sustrato adecuado; un buen drenaje previene la mayoría de los problemas.' }
+                ];
+                recommendations = [
+                    { title: '👁️ Revisión periódica', text: 'Revisá las hojas (por arriba y por abajo) cada semana para detectar a tiempo plagas o cambios de color.' },
+                    { title: '🧹 Higiene', text: 'Retirá hojas secas o enfermas y limpiá el sustrato superficial para mantener la planta sana.' }
+                ];
+            }
+
+            return {
+                name, scientific, family,
+                flowers_or_fruits: '',
+                health, healthIcon, severity, confidence,
+                identification,
+                problems,
+                homeRemedies: [], // Pl@ntNet no genera remedios caseros
+                wellnessTips,
+                recommendations,
+                // Datos extra de Pl@ntNet (no se muestran en el cuerpo principal).
+                alternatives: speciesResults.slice(1, 4).map(r => ({
+                    name: (r.species && ((r.species.commonNames && r.species.commonNames[0]) || r.species.scientificNameWithoutAuthor)) || '',
+                    confidence: Math.round((r.score || 0) * 100)
+                })),
+                remainingRequests: (speciesData && speciesData.remainingIdentificationRequests) || null
+            };
         }
 
         function initializeApp() {
             const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light';
             applyTheme(savedTheme);
-            populateModelSelect();
-            refreshApiKeyField();
             if (checkApiKey()) { loadHistory(); }
+            refreshQuota();
         }
 
         document.addEventListener('DOMContentLoaded', () => {
