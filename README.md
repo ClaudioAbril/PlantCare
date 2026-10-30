@@ -15,14 +15,19 @@ para el navegador):
 📲 **[PlantCare-android.apk](android/dist/PlantCare-android.apk)**
 
 - Toma una foto o elegí una de la galería → "🌿 Analizar" → la respuesta llega en ~10-30 s.
-- La clave API de NIM va en `android/local.properties` (no commiteada) y queda embebida
-  en el APK: **solo para este POC personal, no distribuir el APK**.
+- ⚙️ **Configuración**: desde la app se elige el modelo y se pega la API key de
+  [build.nvidia.com](https://build.nvidia.com). Un desplegable lista los modelos habilitados
+  para esa clave (traídos de la API NIM). Se guarda en el teléfono y se puede cambiar cuando
+  haga falta, sin recompilar.
+- La clave en `android/local.properties` (no commiteada) pasa a ser **opcional**: funciona
+  como fallback inicial si todavía no se configuró ninguna en la app.
+  **solo para este POC personal, no distribuir el APK**.
 
 ### Reconstruir el APK
 
 ```bat
 cd android
-:: necesitás local.properties con sdk.dir y NIM_API_KEY=nvapi-...
+:: necesitás local.properties con sdk.dir (NIM_API_KEY es opcional, es solo fallback)
 gradlew assembleDebug
 ```
 

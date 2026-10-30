@@ -1,5 +1,7 @@
 package ar.plantcare.app
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -21,7 +23,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,18 +33,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +62,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -73,6 +88,7 @@ import org.json.JSONObject
 // ---------------------------------------------------------------------------
 
 private const val NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+private const val NIM_MODELS_URL = "https://integrate.api.nvidia.com/v1/models"
 private const val NIM_MODEL = "google/diffusiongemma-26b-a4b-it"
 
 private const val SYSTEM_PROMPT = """
@@ -141,6 +157,20 @@ class MainActivity : ComponentActivity() {
     var uiError by mutableStateOf("")
         private set
 
+    // Estado de la ventana de configuración
+    var uiSettingsOpen by mutableStateOf(false)
+        private set
+    var uiApiKeyDraft by mutableStateOf("")
+        private set
+    var uiModelDraft by mutableStateOf("")
+        private set
+    var uiModels by mutableStateOf<List<String>>(emptyList())
+        private set
+    var uiModelsLoading by mutableStateOf(false)
+        private set
+    var uiModelsMsg by mutableStateOf("")
+        private set
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
@@ -189,6 +219,9 @@ class MainActivity : ComponentActivity() {
                         Phase.RESULT -> ResultScreen(this, padding)
                     }
                 }
+                if (uiSettingsOpen) {
+                    SettingsSheet()
+                }
             }
         }
     }
@@ -204,6 +237,105 @@ class MainActivity : ComponentActivity() {
     fun launchGallery() = pickGallery.launch("image/*")
 
     fun launchCamera() = takePhoto.launch(prepareCameraCapture())
+
+    // ------------------------------------------------------------------
+    // Configuración: API key y modelo (persisten en el teléfono)
+    // ------------------------------------------------------------------
+
+    private val prefs by lazy {
+        getSharedPreferences("plantcare_settings", Context.MODE_PRIVATE)
+    }
+
+    private fun savedApiKey(): String = prefs.getString("nim_api_key", "")?.trim().orEmpty()
+
+    /** Clave efectiva: la guardada en Configuración o, si no hay, la embebida en el APK. */
+    fun effectiveApiKey(): String = savedApiKey().ifBlank { BuildConfig.NIM_API_KEY.trim() }
+
+    /** Modelo efectivo: el guardado en Configuración o, si no hay, el por defecto. */
+    fun effectiveModel(): String =
+        prefs.getString("nim_model", "")?.trim().orEmpty().ifBlank { NIM_MODEL }
+
+    fun openSettings() {
+        uiApiKeyDraft = savedApiKey()
+        uiModelDraft = effectiveModel()
+        uiModelsMsg = ""
+        uiSettingsOpen = true
+        // Con una clave ya configurada, el listado de modelos se trae solo.
+        if (uiApiKeyDraft.isNotBlank() && uiModels.isEmpty()) fetchModels(uiApiKeyDraft)
+    }
+
+    fun saveSettings() {
+        prefs.edit()
+            .putString("nim_api_key", uiApiKeyDraft.trim())
+            .putString("nim_model", uiModelDraft.trim())
+            .apply()
+        uiSettingsOpen = false
+    }
+
+    /** Pega el texto del portapapeles en el campo de API key (gesto del usuario). */
+    fun pasteApiKey() {
+        val cm = getSystemService(ClipboardManager::class.java)
+        val text = cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
+        if (text.isBlank()) {
+            uiModelsMsg = "El portapapeles está vacío."
+        } else {
+            uiApiKeyDraft = text
+            uiModelsMsg = ""
+        }
+    }
+
+    /** Trae los modelos habilitados para esta clave: GET /v1/models (OpenAI-compatible). */
+    fun fetchModels(apiKey: String) {
+        val key = apiKey.trim()
+        if (key.isBlank()) {
+            uiModelsMsg = "Primero escribí tu API key de NIM."
+            return
+        }
+        uiModelsLoading = true
+        uiModelsMsg = ""
+        val request = Request.Builder()
+            .url(NIM_MODELS_URL)
+            .addHeader("Authorization", "Bearer $key")
+            .get()
+            .build()
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                mainHandler.post {
+                    uiModelsLoading = false
+                    uiModelsMsg = "No se pudo conectar: ${e.message}"
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string().orEmpty()
+                mainHandler.post {
+                    uiModelsLoading = false
+                    if (!response.isSuccessful) {
+                        uiModelsMsg = if (response.code == 401 || response.code == 403) {
+                            "API key inválida o vencida (HTTP ${response.code})."
+                        } else {
+                            "Error HTTP ${response.code} al listar modelos.\n${body.take(300)}"
+                        }
+                    } else {
+                        try {
+                            val arr = JSONObject(body).getJSONArray("data")
+                            val ids = mutableListOf<String>()
+                            for (i in 0 until arr.length()) {
+                                ids.add(arr.getJSONObject(i).optString("id"))
+                            }
+                            uiModels = ids.filter { it.isNotBlank() }.distinct().sorted()
+                            uiModelsMsg = "${uiModels.size} modelos disponibles para tu clave."
+                            if (uiModels.isNotEmpty() && uiModels.none { it == uiModelDraft }) {
+                                uiModelDraft = if (uiModels.contains(NIM_MODEL)) NIM_MODEL else uiModels.first()
+                            }
+                        } catch (e: Exception) {
+                            uiModelsMsg = "Respuesta inesperada del servidor.\n${body.take(300)}"
+                        }
+                    }
+                }
+            }
+        })
+    }
 
     fun reset() {
         uiBitmap = null
@@ -260,13 +392,20 @@ class MainActivity : ComponentActivity() {
 
     fun analyze() {
         val bitmap = uiBitmap ?: return
+        val apiKey = effectiveApiKey()
+        if (apiKey.isBlank()) {
+            uiPhase = Phase.ERROR
+            uiError = "Falta configurar la API key.\nEntrá a ⚙️ Configuración y pegá tu clave de build.nvidia.com."
+            return
+        }
+        val model = effectiveModel()
         mainHandler.post { uiPhase = Phase.ANALYZING }
         Thread {
             try {
-                val payload = buildPayload(bitmap)
+                val payload = buildPayload(bitmap, model)
                 val request = Request.Builder()
                     .url(NIM_URL)
-                    .addHeader("Authorization", "Bearer ${BuildConfig.NIM_API_KEY}")
+                    .addHeader("Authorization", "Bearer $apiKey")
                     .addHeader("Content-Type", "application/json")
                     .post(payload.toRequestBody("application/json".toMediaType()))
                     .build()
@@ -310,7 +449,7 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun buildPayload(bitmap: Bitmap): String {
+    private fun buildPayload(bitmap: Bitmap, model: String): String {
         val w = bitmap.width
         val h = bitmap.height
         val scale = minOf(1f, 1024f / maxOf(w, h))
@@ -333,15 +472,18 @@ class MainActivity : ComponentActivity() {
             .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
             .put(JSONObject().put("role", "user").put("content", userContent))
 
-        return JSONObject()
-            .put("model", NIM_MODEL)
+        val payload = JSONObject()
+            .put("model", model)
             .put("messages", messages)
             .put("max_tokens", 4096)
             .put("temperature", 1)
             .put("top_p", 0.95)
             .put("stream", false)
-            .put("chat_template_kwargs", JSONObject().put("enable_thinking", true))
-            .toString()
+        // El modo thinking solo existe en los modelos gemma; en el resto genera un 400.
+        if (model.contains("gemma", ignoreCase = true)) {
+            payload.put("chat_template_kwargs", JSONObject().put("enable_thinking", true))
+        }
+        return payload.toString()
     }
 
     // ------------------------------------------------------------------
@@ -398,6 +540,11 @@ class MainActivity : ComponentActivity() {
                 onClick = { activity.launchGallery() },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("🖼️ Elegir de la galería") }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { activity.openSettings() },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("⚙️ Configuración") }
         }
     }
 
@@ -419,6 +566,162 @@ class MainActivity : ComponentActivity() {
                 onClick = { activity.reset() },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Reintentar") }
+        }
+    }
+
+    @Composable
+    private fun SettingsSheet() {
+        var showKey by remember { mutableStateOf(false) }
+        var menuExpanded by remember { mutableStateOf(false) }
+        var modelFilter by remember { mutableStateOf("") }
+
+        ModalBottomSheet(onDismissRequest = { uiSettingsOpen = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "⚙️ Configuración",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                OutlinedTextField(
+                    value = uiApiKeyDraft,
+                    onValueChange = { uiApiKeyDraft = it },
+                    label = { Text("API key de NVIDIA NIM") },
+                    placeholder = { Text("nvapi-…") },
+                    singleLine = true,
+                    visualTransformation =
+                        if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { pasteApiKey() }) { Text("📋") }
+                            TextButton(onClick = { showKey = !showKey }) {
+                                Text(if (showKey) "🙈" else "👁")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Generala gratis en build.nvidia.com. Se guarda solo en este teléfono.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedButton(
+                    onClick = { fetchModels(uiApiKeyDraft) },
+                    enabled = !uiModelsLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiModelsLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Buscando modelos…")
+                    } else {
+                        Text("🔄 Cargar modelos")
+                    }
+                }
+
+                if (uiModelsMsg.isNotBlank()) {
+                    Text(
+                        uiModelsMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                OutlinedTextField(
+                    value = modelFilter,
+                    onValueChange = { modelFilter = it },
+                    label = { Text("Filtrar modelos…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (uiModels.isEmpty()) {
+                    Text(
+                        "Todavía no cargaste la lista: tocá \"Cargar modelos\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    ExposedDropdownMenuBox(
+                        expanded = menuExpanded,
+                        onExpandedChange = { menuExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = uiModelDraft,
+                            onValueChange = { uiModelDraft = it },
+                            label = { Text("Modelo") },
+                            singleLine = true,
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier.heightIn(max = 320.dp)
+                        ) {
+                            val f = modelFilter.trim().lowercase()
+                            val items = if (f.isBlank()) {
+                                uiModels
+                            } else {
+                                uiModels.filter { it.lowercase().contains(f) }
+                            }
+                            if (items.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("Sin coincidencias") },
+                                    onClick = { }
+                                )
+                            } else {
+                                items.forEach { m ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                m,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        },
+                                        onClick = {
+                                            uiModelDraft = m
+                                            menuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { uiSettingsOpen = false },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Cancelar") }
+                    Button(
+                        onClick = { saveSettings() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Guardar") }
+                }
+            }
         }
     }
 
