@@ -19,6 +19,10 @@ para el navegador):
   [build.nvidia.com](https://build.nvidia.com). Un desplegable lista los modelos habilitados
   para esa clave (traídos de la API NIM). Se guarda en el teléfono y se puede cambiar cuando
   haga falta, sin recompilar.
+- 🧪 **Probar conexión** (v1.2): hace una llamada real a `chat/completions` con la clave y
+  el modelo de la pantalla y reporta el resultado; si falla, explica el motivo en español
+  (sin internet/DNS, timeout, clave inválida o vencida, modelo no disponible, límite 429).
+  Es la validación estricta: el listado `/v1/models` responde 200 incluso con una clave corrupta.
 - La clave en `android/local.properties` (no commiteada) pasa a ser **opcional**: funciona
   como fallback inicial si todavía no se configuró ninguna en la app.
   **solo para este POC personal, no distribuir el APK**.

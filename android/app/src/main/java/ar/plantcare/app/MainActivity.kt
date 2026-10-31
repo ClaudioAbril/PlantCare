@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -140,6 +141,22 @@ private fun cleanModelJson(raw: String): String {
 
 private fun JSONObject.str(key: String): String = optString(key, "").trim().ifBlank { "—" }
 
+/** Traduce un error de red de OkHttp a una pista concreta en español. */
+private fun describeNetError(e: Exception): String = when (e) {
+    is java.net.UnknownHostException ->
+        "el teléfono no pudo resolver integrate.api.nvidia.com. Revisá que tenga " +
+            "internet (WiFi o datos) y, si el WiFi pide login en el navegador (portal cautivo), " +
+            "conectate primero."
+    is java.net.SocketTimeoutException ->
+        "se agotó el tiempo de espera: la red del teléfono no llega al servidor. " +
+            "Probá cambiar de WiFi a datos móviles (o viceversa)."
+    is java.net.ConnectException ->
+        "la conexión fue rechazada por la red (¿VPN, firewall o proxy?)."
+    is javax.net.ssl.SSLException ->
+        "error de cifrado TLS: ${e.message}"
+    else -> e.message ?: e.javaClass.simpleName
+}
+
 // ---------------------------------------------------------------------------
 // Actividad
 // ---------------------------------------------------------------------------
@@ -169,6 +186,10 @@ class MainActivity : ComponentActivity() {
     var uiModelsLoading by mutableStateOf(false)
         private set
     var uiModelsMsg by mutableStateOf("")
+        private set
+    var uiTestRunning by mutableStateOf(false)
+        private set
+    var uiTestMsg by mutableStateOf("")
         private set
 
     private val httpClient = OkHttpClient.Builder()
@@ -259,6 +280,7 @@ class MainActivity : ComponentActivity() {
         uiApiKeyDraft = savedApiKey()
         uiModelDraft = effectiveModel()
         uiModelsMsg = ""
+        uiTestMsg = ""
         uiSettingsOpen = true
         // Con una clave ya configurada, el listado de modelos se trae solo.
         if (uiApiKeyDraft.isNotBlank() && uiModels.isEmpty()) fetchModels(uiApiKeyDraft)
@@ -330,6 +352,77 @@ class MainActivity : ComponentActivity() {
                             }
                         } catch (e: Exception) {
                             uiModelsMsg = "Respuesta inesperada del servidor.\n${body.take(300)}"
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    /**
+     * Prueba la conexión contra chat/completions con la clave y el modelo que se ven en
+     * pantalla (los borradores, no los guardados). Es la validación real: /v1/models
+     * responde 200 incluso con una clave corrupta, pero chat/completions no.
+     */
+    fun testConnection() {
+        val key = uiApiKeyDraft.trim().ifBlank { BuildConfig.NIM_API_KEY.trim() }
+        if (key.isBlank()) {
+            uiTestMsg = "Primero escribí tu API key de NIM."
+            return
+        }
+        val model = uiModelDraft.trim().ifBlank { NIM_MODEL }
+        uiTestRunning = true
+        uiTestMsg = ""
+        val started = System.currentTimeMillis()
+        val payload = JSONObject()
+            .put("model", model)
+            .put(
+                "messages",
+                JSONArray().put(JSONObject().put("role", "user").put("content", "Responde solo: OK"))
+            )
+            .put("max_tokens", 16)
+            .put("temperature", 0)
+            .put("stream", false)
+        if (model.contains("gemma", ignoreCase = true)) {
+            payload.put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+        }
+        val request = Request.Builder()
+            .url(NIM_URL)
+            .addHeader("Authorization", "Bearer $key")
+            .addHeader("Content-Type", "application/json")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        // Límite total estricto para el test: si la red está rota, no colgar la pantalla.
+        val testClient = httpClient.newBuilder().callTimeout(60, TimeUnit.SECONDS).build()
+        testClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                mainHandler.post {
+                    uiTestRunning = false
+                    uiTestMsg = "❌ Sin conexión: ${describeNetError(e)}"
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string().orEmpty()
+                val ms = System.currentTimeMillis() - started
+                mainHandler.post {
+                    uiTestRunning = false
+                    uiTestMsg = if (response.isSuccessful) {
+                        "✅ Conexión OK: clave y modelo \"$model\" válidos (${ms / 1000.0} s). " +
+                            "Ya podés Guardar y analizar plantas."
+                    } else {
+                        when (response.code) {
+                            401, 403 ->
+                                "❌ API key inválida o vencida (HTTP ${response.code}). " +
+                                    "Generá una nueva gratis en build.nvidia.com."
+                            404 ->
+                                "❌ El modelo \"$model\" no está disponible para tu clave " +
+                                    "(HTTP 404). Tocá \"🔄 Cargar modelos\" y elegí uno de la lista.\n" +
+                                    body.take(200)
+                            429 ->
+                                "❌ Límite de solicitudes alcanzado (HTTP 429). Esperá unos " +
+                                    "minutos y volvé a probar."
+                            else -> "❌ Error HTTP ${response.code}.\n${body.take(300)}"
                         }
                     }
                 }
@@ -413,7 +506,8 @@ class MainActivity : ComponentActivity() {
                     override fun onFailure(call: Call, e: IOException) {
                         mainHandler.post {
                             uiPhase = Phase.ERROR
-                            uiError = "No se pudo conectar a la API: ${e.message}"
+                            uiError = "No se pudo conectar a la API: ${describeNetError(e)}\n" +
+                                "Podés verificar la conexión en ⚙️ Configuración → 🧪 Probar conexión."
                         }
                     }
 
@@ -574,8 +668,12 @@ class MainActivity : ComponentActivity() {
         var showKey by remember { mutableStateOf(false) }
         var menuExpanded by remember { mutableStateOf(false) }
         var modelFilter by remember { mutableStateOf("") }
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-        ModalBottomSheet(onDismissRequest = { uiSettingsOpen = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { uiSettingsOpen = false },
+            sheetState = sheetState
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -706,6 +804,35 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+
+                OutlinedButton(
+                    onClick = { testConnection() },
+                    enabled = !uiTestRunning,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiTestRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Probando conexión…")
+                    } else {
+                        Text("🧪 Probar conexión")
+                    }
+                }
+
+                if (uiTestMsg.isNotBlank()) {
+                    Text(
+                        uiTestMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (uiTestMsg.startsWith("✅")) {
+                            Color(0xFF2E7D32)
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
                 }
 
                 Row(
