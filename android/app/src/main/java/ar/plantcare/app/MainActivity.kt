@@ -92,6 +92,22 @@ private const val NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completion
 private const val NIM_MODELS_URL = "https://integrate.api.nvidia.com/v1/models"
 private const val NIM_MODEL = "google/diffusiongemma-26b-a4b-it"
 
+// JPEG 8x8 (verde) para el test de conexión: valida el mismo camino que el análisis,
+// que envía imágenes. Ojo: los modelos sin visión la ignoran sin error (probado con
+// gpt-oss-20b, responde 200 con content null).
+private const val TEST_IMAGE_B64 =
+    "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsND" +
+        "hIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQU" +
+        "FBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAAIAAgDASIAAhEBAxEB/8Q" +
+        "AHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBR" +
+        "IhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTV" +
+        "FVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLD" +
+        "xMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAEC" +
+        "AwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSM" +
+        "zUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eH" +
+        "l6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5e" +
+        "bn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD5yooor8PP5vP/2Q=="
+
 private const val SYSTEM_PROMPT = """
 Eres un experto botánico y fitopatólogo. Analiza la imagen de la planta que recibe el usuario.
 Responde ÚNICAMENTE con un objeto JSON válido (sin markdown, sin texto alrededor) en español, con esta estructura exacta:
@@ -282,8 +298,8 @@ class MainActivity : ComponentActivity() {
         uiModelsMsg = ""
         uiTestMsg = ""
         uiSettingsOpen = true
-        // Con una clave ya configurada, el listado de modelos se trae solo.
-        if (uiApiKeyDraft.isNotBlank() && uiModels.isEmpty()) fetchModels(uiApiKeyDraft)
+        // Con una clave efectiva ya disponible (guardada o embebida), el listado se trae solo.
+        if (effectiveApiKey().isNotBlank() && uiModels.isEmpty()) fetchModels(uiApiKeyDraft)
     }
 
     fun saveSettings() {
@@ -308,7 +324,8 @@ class MainActivity : ComponentActivity() {
 
     /** Trae los modelos habilitados para esta clave: GET /v1/models (OpenAI-compatible). */
     fun fetchModels(apiKey: String) {
-        val key = apiKey.trim()
+        // Igual que en el análisis: si el campo está vacío se usa la clave embebida del APK.
+        val key = apiKey.trim().ifBlank { BuildConfig.NIM_API_KEY.trim() }
         if (key.isBlank()) {
             uiModelsMsg = "Primero escribí tu API key de NIM."
             return
@@ -363,6 +380,11 @@ class MainActivity : ComponentActivity() {
      * Prueba la conexión contra chat/completions con la clave y el modelo que se ven en
      * pantalla (los borradores, no los guardados). Es la validación real: /v1/models
      * responde 200 incluso con una clave corrupta, pero chat/completions no.
+     *
+     * El pedido incluye una imagen diminuta, igual que el análisis real. Si el modelo
+     * elegido falla por disponibilidad (404/410: el catálogo de /v1/models lista modelos
+     * retirados o no habilitados por cuenta), se prueba también el modelo recomendado
+     * de la app para sugerir un reemplazo que funcione.
      */
     fun testConnection() {
         val key = uiApiKeyDraft.trim().ifBlank { BuildConfig.NIM_API_KEY.trim() }
@@ -374,12 +396,69 @@ class MainActivity : ComponentActivity() {
         uiTestRunning = true
         uiTestMsg = ""
         val started = System.currentTimeMillis()
+        postTestRequest(key, model, started) { ok, code, body, ms ->
+            if (ok) {
+                uiTestRunning = false
+                uiTestMsg = "✅ Conexión OK: clave y modelo \"$model\" válidos (${ms / 1000.0} s). " +
+                    "Ya podés Guardar y analizar plantas."
+                return@postTestRequest
+            }
+            val base = if (code == -1) {
+                "❌ Sin conexión: $body"
+            } else {
+                when (code) {
+                    401, 403 ->
+                        "❌ API key inválida o vencida (HTTP $code). " +
+                            "Generá una nueva gratis en build.nvidia.com."
+                    404 ->
+                        "❌ El modelo \"$model\" no está disponible para tu cuenta (HTTP 404). " +
+                            "El catálogo lista modelos que pueden estar retirados o no habilitados " +
+                            "para tu clave.\n${body.take(200)}"
+                    410 ->
+                        "❌ El modelo \"$model\" fue retirado del servicio (HTTP 410, end of " +
+                            "life). La lista del catálogo incluye modelos viejos.\n${body.take(200)}"
+                    429 ->
+                        "❌ Límite de solicitudes alcanzado (HTTP 429). Esperá unos minutos y " +
+                            "volvé a probar."
+                    else -> "❌ Error HTTP $code.\n${body.take(300)}"
+                }
+            }
+            // Ante un modelo muerto, proponemos el recomendado probándolo en vivo.
+            if ((code == 404 || code == 410) && model != NIM_MODEL) {
+                postTestRequest(key, NIM_MODEL, System.currentTimeMillis()) { ok2, code2, body2, ms2 ->
+                    uiTestRunning = false
+                    uiTestMsg = base + if (ok2) {
+                        "\n\n💡 Probé el modelo recomendado \"$NIM_MODEL\": ✅ funciona " +
+                            "(${ms2 / 1000.0} s). Seleccionalo en la lista y Guardá."
+                    } else {
+                        "\n\n💡 El modelo recomendado \"$NIM_MODEL\" también falla ahora " +
+                            "(HTTP $code2). ${body2.take(120)}"
+                    }
+                }
+            } else {
+                uiTestRunning = false
+                uiTestMsg = base
+            }
+        }
+    }
+
+    /** POST mínimo a chat/completions con imagen de prueba; reporta (ok, código, cuerpo, ms). */
+    private fun postTestRequest(
+        key: String,
+        model: String,
+        startedAt: Long,
+        onResult: (ok: Boolean, code: Int, body: String, ms: Long) -> Unit
+    ) {
+        val content = JSONArray()
+            .put(JSONObject().put("type", "text").put("text", "Responde solo: OK"))
+            .put(
+                JSONObject()
+                    .put("type", "image_url")
+                    .put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$TEST_IMAGE_B64"))
+            )
         val payload = JSONObject()
             .put("model", model)
-            .put(
-                "messages",
-                JSONArray().put(JSONObject().put("role", "user").put("content", "Responde solo: OK"))
-            )
+            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
             .put("max_tokens", 16)
             .put("temperature", 0)
             .put("stream", false)
@@ -397,35 +476,14 @@ class MainActivity : ComponentActivity() {
         testClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 mainHandler.post {
-                    uiTestRunning = false
-                    uiTestMsg = "❌ Sin conexión: ${describeNetError(e)}"
+                    onResult(false, -1, describeNetError(e), System.currentTimeMillis() - startedAt)
                 }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string().orEmpty()
-                val ms = System.currentTimeMillis() - started
-                mainHandler.post {
-                    uiTestRunning = false
-                    uiTestMsg = if (response.isSuccessful) {
-                        "✅ Conexión OK: clave y modelo \"$model\" válidos (${ms / 1000.0} s). " +
-                            "Ya podés Guardar y analizar plantas."
-                    } else {
-                        when (response.code) {
-                            401, 403 ->
-                                "❌ API key inválida o vencida (HTTP ${response.code}). " +
-                                    "Generá una nueva gratis en build.nvidia.com."
-                            404 ->
-                                "❌ El modelo \"$model\" no está disponible para tu clave " +
-                                    "(HTTP 404). Tocá \"🔄 Cargar modelos\" y elegí uno de la lista.\n" +
-                                    body.take(200)
-                            429 ->
-                                "❌ Límite de solicitudes alcanzado (HTTP 429). Esperá unos " +
-                                    "minutos y volvé a probar."
-                            else -> "❌ Error HTTP ${response.code}.\n${body.take(300)}"
-                        }
-                    }
-                }
+                val ms = System.currentTimeMillis() - startedAt
+                mainHandler.post { onResult(response.isSuccessful, response.code, body, ms) }
             }
         })
     }

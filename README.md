@@ -23,6 +23,10 @@ para el navegador):
   el modelo de la pantalla y reporta el resultado; si falla, explica el motivo en español
   (sin internet/DNS, timeout, clave inválida o vencida, modelo no disponible, límite 429).
   Es la validación estricta: el listado `/v1/models` responde 200 incluso con una clave corrupta.
+- ⚠️ (v1.3) El catálogo de `/v1/models` está desactualizado: lista modelos retirados
+  (HTTP 410) o no habilitados por cuenta (HTTP 404 "Function … Not found for account").
+  El test ahora manda una imagen diminuta como el análisis real y, si el modelo elegido
+  está muerto, prueba en vivo el modelo recomendado (`diffusiongemma`) y lo sugiere.
 - La clave en `android/local.properties` (no commiteada) pasa a ser **opcional**: funciona
   como fallback inicial si todavía no se configuró ninguna en la app.
   **solo para este POC personal, no distribuir el APK**.
