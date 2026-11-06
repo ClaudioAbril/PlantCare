@@ -947,12 +947,17 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // La imagen toma solo el espacio restante (weight) y se muestra completa
+            // (Fit): con FillWidth y sin límite de alto, una foto alta empujaba los
+            // botones "Analizar"/"Cambiar foto" fuera de la pantalla.
             activity.uiBitmap?.let { bitmap ->
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "Foto de la planta",
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth()
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 )
             }
             Row(
