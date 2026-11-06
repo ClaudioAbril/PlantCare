@@ -27,6 +27,11 @@ para el navegador):
   (HTTP 410) o no habilitados por cuenta (HTTP 404 "Function … Not found for account").
   El test ahora manda una imagen diminuta como el análisis real y, si el modelo elegido
   está muerto, prueba en vivo el modelo recomendado (`diffusiongemma`) y lo sugiere.
+- 🔍 **Fotos de referencia** (v1.5): tras identificar la planta, la app busca en internet
+  hasta 3 fotos reales de la especie (iNaturalist, con Wikimedia Commons de respaldo)
+  para que el usuario confirme que la identificación es correcta. Tocar una miniatura
+  abre la foto en el navegador. Los modelos de IA no navegan la web: la búsqueda la hace
+  la app con el nombre científico devuelto.
 - La clave en `android/local.properties` (no commiteada) pasa a ser **opcional**: funciona
   como fallback inicial si todavía no se configuró ninguna en la app.
   **solo para este POC personal, no distribuir el APK**.

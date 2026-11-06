@@ -2,6 +2,7 @@ package ar.plantcare.app
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -14,6 +15,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +76,7 @@ import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import okhttp3.Call
 import okhttp3.Callback
@@ -206,6 +210,16 @@ class MainActivity : ComponentActivity() {
     var uiTestRunning by mutableStateOf(false)
         private set
     var uiTestMsg by mutableStateOf("")
+        private set
+
+    // Fotos de referencia de la especie detectada (iNaturalist / Wikimedia Commons)
+    var uiRefPhotos by mutableStateOf<List<Bitmap>>(emptyList())
+        private set
+    var uiRefPhotoUrls by mutableStateOf<List<String>>(emptyList())
+        private set
+    var uiRefPhotosLoading by mutableStateOf(false)
+        private set
+    var uiRefPhotosMsg by mutableStateOf("")
         private set
 
     private val httpClient = OkHttpClient.Builder()
@@ -488,11 +502,160 @@ class MainActivity : ComponentActivity() {
         })
     }
 
+    // ------------------------------------------------------------------
+    // Fotos de referencia de la especie detectada (internet)
+    // Los modelos de NIM no navegan la web y las URLs que pudieran
+    // "responder" serían alucinaciones: la búsqueda la hace la app con el
+    // nombre científico, contra APIs gratuitas y sin clave.
+    // ------------------------------------------------------------------
+
+    /** Nombres que no sirven para buscar (la especie no fue identificada). */
+    private fun usableSpeciesName(s: String): Boolean {
+        val v = s.trim().lowercase()
+        return v.isNotBlank() && v !in setOf(
+            "—", "-", "–", "n/a", "na", "desconocida", "no identificada",
+            "no identificable", "especie desconocida", "sin datos"
+        )
+    }
+
+    private fun refClient() = httpClient.newBuilder().callTimeout(25, TimeUnit.SECONDS).build()
+
+    /**
+     * Busca hasta 3 fotos de la especie detectada y las deja listas para la pantalla
+     * de resultado. Cadena de intentos: iNaturalist (científico → común) y
+     * Wikimedia Commons (científico → común). Nunca bloquea la UI ni falla duro:
+     * si no hay fotos, simplemente no se muestra la sección.
+     */
+    fun fetchReferencePhotos(result: JSONObject) {
+        val sci = result.optString("scientific").trim()
+        val common = result.optString("name").trim()
+        val sciOk = usableSpeciesName(sci)
+        val commonOk = usableSpeciesName(common)
+        if (!sciOk && !commonOk) return
+
+        uiRefPhotos = emptyList()
+        uiRefPhotoUrls = emptyList()
+        uiRefPhotosMsg = ""
+        uiRefPhotosLoading = true
+
+        Thread {
+            val urls = mutableListOf<String>()
+            try {
+                if (sciOk) fetchRefUrlsFromINat(sci, urls)
+                if (urls.size < 4 && commonOk) fetchRefUrlsFromINat(common, urls)
+                if (urls.size < 4 && sciOk) fetchRefUrlsFromCommons(sci, urls)
+                if (urls.size < 4 && commonOk) fetchRefUrlsFromCommons(common, urls)
+            } catch (e: Exception) {
+                // seguimos con lo que se haya recolectado
+            }
+            val bitmaps = mutableListOf<Bitmap>()
+            val okUrls = mutableListOf<String>()
+            for (u in urls) {
+                if (bitmaps.size >= 3) break
+                try {
+                    downloadBitmapLimited(u, 500)?.let {
+                        bitmaps.add(it)
+                        okUrls.add(u)
+                    }
+                } catch (e: Exception) {
+                    // foto ilegible: probamos con la siguiente
+                }
+            }
+            mainHandler.post {
+                uiRefPhotosLoading = false
+                if (bitmaps.isEmpty()) {
+                    uiRefPhotosMsg = "No se pudieron cargar fotos de referencia (¿sin internet?)."
+                } else {
+                    uiRefPhotos = bitmaps
+                    uiRefPhotoUrls = okUrls
+                }
+            }
+        }.start()
+    }
+
+    /** Observaciones de iNaturalist con foto; el campo url es square: /medium. da ~500px. */
+    private fun fetchRefUrlsFromINat(query: String, out: MutableList<String>) {
+        val url = "https://api.inaturalist.org/v1/observations?photos=true&per_page=12" +
+            "&order_by=votes&taxon_name=" + URLEncoder.encode(query, "UTF-8")
+        val resp = refClient().newCall(
+            Request.Builder().url(url).addHeader("User-Agent", "PlantCare-POC/1.5").build()
+        ).execute()
+        val body = resp.use { r -> if (r.isSuccessful) r.body?.string().orEmpty() else "" }
+        if (body.isBlank()) return
+        val results = JSONObject(body).optJSONArray("results") ?: return
+        for (i in 0 until results.length()) {
+            val photos = results.getJSONObject(i).optJSONArray("photos") ?: continue
+            for (j in 0 until photos.length()) {
+                val p = photos.getJSONObject(j)
+                val u = p.optString("url").replace("/square.", "/medium.").ifBlank {
+                    p.optString("medium_url")
+                }
+                if (u.isNotBlank() && u !in out) out.add(u)
+            }
+            if (out.size >= 4) return
+        }
+    }
+
+    /** Búsqueda de archivos en Wikimedia Commons (miniaturas de 500px). */
+    private fun fetchRefUrlsFromCommons(query: String, out: MutableList<String>) {
+        val url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
+            "&generator=search&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url" +
+            "&iiurlwidth=500&gsrsearch=" + URLEncoder.encode(query, "UTF-8")
+        val resp = refClient().newCall(
+            Request.Builder().url(url)
+                .addHeader("User-Agent", "PlantCare-POC/1.5 (app personal de plantas)").build()
+        ).execute()
+        val body = resp.use { r -> if (r.isSuccessful) r.body?.string().orEmpty() else "" }
+        if (body.isBlank()) return
+        val pages = JSONObject(body).optJSONObject("query")?.optJSONObject("pages") ?: return
+        val keys = pages.keys()
+        while (keys.hasNext() && out.size < 8) {
+            val info = pages.getJSONObject(keys.next()).optJSONArray("imageinfo")?.optJSONObject(0)
+                ?: continue
+            val u = info.optString("thumburl")
+            val lower = u.lowercase()
+            if (u.isNotBlank() && u !in out &&
+                (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png"))
+            ) {
+                out.add(u)
+            }
+        }
+    }
+
+    private fun downloadBitmapLimited(url: String, maxDim: Int): Bitmap? {
+        val bytes = refClient().newCall(
+            Request.Builder().url(url).addHeader("User-Agent", "PlantCare-POC/1.5").build()
+        ).execute().use { r ->
+            if (r.isSuccessful) r.body?.bytes() else null
+        } ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val w = bounds.outWidth
+        val h = bounds.outHeight
+        if (w <= 0 || h <= 0) return null
+        var sample = 1
+        while (w / sample > maxDim || h / sample > maxDim) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
+
+    private fun openPhotoInBrowser(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            // sin navegador instalado: no pasa nada
+        }
+    }
+
     fun reset() {
         uiBitmap = null
         uiResult = null
         uiError = ""
         uiPhase = Phase.IDLE
+        uiRefPhotos = emptyList()
+        uiRefPhotoUrls = emptyList()
+        uiRefPhotosLoading = false
+        uiRefPhotosMsg = ""
         cameraFile?.delete()
         cameraFile = null
     }
@@ -550,6 +713,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         val model = effectiveModel()
+        uiRefPhotos = emptyList()
+        uiRefPhotoUrls = emptyList()
+        uiRefPhotosMsg = ""
         mainHandler.post { uiPhase = Phase.ANALYZING }
         Thread {
             try {
@@ -582,8 +748,10 @@ class MainActivity : ComponentActivity() {
                                         .getJSONObject(0)
                                         .getJSONObject("message")
                                         .getString("content")
-                                    uiResult = JSONObject(cleanModelJson(content))
+                                    val parsed = JSONObject(cleanModelJson(content))
+                                    uiResult = parsed
                                     uiPhase = Phase.RESULT
+                                    fetchReferencePhotos(parsed)
                                 } catch (e: Exception) {
                                     uiPhase = Phase.ERROR
                                     uiError = "La respuesta del modelo no era un JSON válido.\n${body.take(400)}"
@@ -935,7 +1103,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             ) { Text("🔁 Nueva foto") }
-            ResultView(result)
+            ResultView(activity, result)
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -983,8 +1151,72 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Miniaturas de la especie traídas de internet para que el usuario verifique. */
     @Composable
-    private fun ResultView(data: JSONObject) {
+    private fun ReferencePhotosSection(activity: MainActivity) {
+        val loading = activity.uiRefPhotosLoading
+        val photos = activity.uiRefPhotos
+        if (!loading && photos.isEmpty()) {
+            if (activity.uiRefPhotosMsg.isNotBlank()) {
+                Section("Fotos de referencia") {
+                    Text(
+                        activity.uiRefPhotosMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            return
+        }
+        Section("Fotos de referencia de la especie") {
+            Text(
+                "Compará estas fotos con tu planta para confirmar que la identificación " +
+                    "es correcta. Tocá una para verla en grande.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            if (loading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Buscando fotos en internet…",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    photos.forEachIndexed { i, bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Foto de referencia ${i + 1}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    activity.uiRefPhotoUrls.getOrNull(i)?.let { url ->
+                                        activity.openPhotoInBrowser(url)
+                                    }
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ResultView(activity: MainActivity, data: JSONObject) {
         val name = data.optString("name").trim().ifBlank { "Especie desconocida" }
         val scientific = data.optString("scientific").trim()
         val family = data.optString("family").trim()
@@ -1056,6 +1288,8 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+
+            ReferencePhotosSection(activity)
 
             if (flowers.isNotBlank()) Section("Floración / frutos") { Text(flowers) }
             if (identification.isNotBlank()) Section("Identificación") { Text(identification) }
