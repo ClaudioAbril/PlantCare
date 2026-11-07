@@ -32,6 +32,11 @@ para el navegador):
   para que el usuario confirme que la identificación es correcta. Tocar una miniatura
   abre la foto en el navegador. Los modelos de IA no navegan la web: la búsqueda la hace
   la app con el nombre científico devuelto.
+- 🧹 **Catálogo sin modelos vencidos** (v1.6): el listado de `/v1/models` incluye modelos
+  retirados (410) y modelos sin endpoint de chat (404, p. ej. embeddings). Al cargar la
+  lista, la app verifica cada modelo con un POST mínimo sin clave — el chequeo de ciclo
+  de vida corre antes que la autenticación, así que no consume cuota ni depende de la
+  clave — y oculta los que no responden como vivos. Ante un 404 dudoso reintenta una vez.
 - La clave en `android/local.properties` (no commiteada) pasa a ser **opcional**: funciona
   como fallback inicial si todavía no se configuró ninguna en la app.
   **solo para este POC personal, no distribuir el APK**.

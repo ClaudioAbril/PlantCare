@@ -77,8 +77,11 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.Call
+import okhttp3.Dispatcher
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -228,6 +231,17 @@ class MainActivity : ComponentActivity() {
         .readTimeout(180, TimeUnit.SECONDS)
         .build()
 
+    /** Cliente para el sondeo de vigencia: muchas consultas cortas en paralelo. */
+    private val probeClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .dispatcher(Dispatcher().apply {
+            maxRequests = 128
+            maxRequestsPerHost = 16
+        })
+        .build()
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var cameraFile: File? = null
 
@@ -362,8 +376,8 @@ class MainActivity : ComponentActivity() {
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string().orEmpty()
                 mainHandler.post {
-                    uiModelsLoading = false
                     if (!response.isSuccessful) {
+                        uiModelsLoading = false
                         uiModelsMsg = if (response.code == 401 || response.code == 403) {
                             "API key inválida o vencida (HTTP ${response.code})."
                         } else {
@@ -376,15 +390,102 @@ class MainActivity : ComponentActivity() {
                             for (i in 0 until arr.length()) {
                                 ids.add(arr.getJSONObject(i).optString("id"))
                             }
-                            uiModels = ids.filter { it.isNotBlank() }.distinct().sorted()
-                            uiModelsMsg = "${uiModels.size} modelos disponibles para tu clave."
-                            if (uiModels.isNotEmpty() && uiModels.none { it == uiModelDraft }) {
-                                uiModelDraft = if (uiModels.contains(NIM_MODEL)) NIM_MODEL else uiModels.first()
+                            val catalog = ids.filter { it.isNotBlank() }.distinct()
+                            if (catalog.isEmpty()) {
+                                uiModelsLoading = false
+                                uiModelsMsg = "El catálogo vino vacío (inusual). ${body.take(200)}"
+                            } else {
+                                // El catálogo lista también modelos vencidos y modelos sin
+                                // chat: se verifica cada uno antes de mostrar la lista.
+                                uiModelsMsg = "Verificando vigencia de ${catalog.size} modelos…"
+                                probeModelLiveness(catalog) { eol, noChat ->
+                                    uiModels = catalog.filter { it !in eol && it !in noChat }
+                                        .sorted()
+                                    uiModelsMsg = buildString {
+                                        append("${uiModels.size} modelos de chat disponibles para tu clave.")
+                                        if (eol.isNotEmpty()) {
+                                            append(" Ocultados ${resumenOcultados(eol)} vencido(s) (fin de vida): ${resumenNombres(eol)}.")
+                                        }
+                                        if (noChat.isNotEmpty()) {
+                                            append(" Ocultados ${resumenOcultados(noChat)} sin soporte de chat (embeddings u otros endpoints).")
+                                        }
+                                    }
+                                    if (uiModels.isNotEmpty() && uiModels.none { it == uiModelDraft }) {
+                                        uiModelDraft = if (uiModels.contains(NIM_MODEL)) NIM_MODEL else uiModels.first()
+                                    }
+                                    uiModelsLoading = false
+                                }
                             }
                         } catch (e: Exception) {
+                            uiModelsLoading = false
                             uiModelsMsg = "Respuesta inesperada del servidor.\n${body.take(300)}"
                         }
                     }
+                }
+            }
+        })
+    }
+
+    /** "1 modelo" o "N modelos", para armar el mensaje de ocultados. */
+    private fun resumenOcultados(set: Set<String>): String =
+        if (set.size == 1) "1 modelo" else "${set.size} modelos"
+
+    /** Hasta 3 nombres; si hay más, los completa con "y N más". */
+    private fun resumenNombres(set: Set<String>): String {
+        val sorted = set.sorted()
+        return if (sorted.size <= 3) {
+            sorted.joinToString()
+        } else {
+            sorted.take(3).joinToString() + " y ${sorted.size - 3} más"
+        }
+    }
+
+    /**
+     * Verifica la vigencia de cada modelo del catálogo contra chat/completions SIN clave:
+     * el chequeo de ciclo de vida corre antes que la autenticación, así que un modelo
+     * vencido responde 410 (end of life), uno sin ruta de chat responde 404 (p. ej.
+     * embeddings) y uno vigente llega hasta la puerta de auth con 401. No consume cuota:
+     * el pedido nunca llega a ejecutar el modelo. Ante 404 se reintenta una vez porque se
+     * observó algún 404 transitorio del gateway; errores de red (-1) conservan el modelo.
+     */
+    private fun probeModelLiveness(
+        ids: List<String>,
+        onDone: (eol: Set<String>, noChat: Set<String>) -> Unit
+    ) {
+        val codes = ConcurrentHashMap<String, Int>()
+        val pending = AtomicInteger(ids.size)
+        for (id in ids) {
+            probeModelOnce(id, retriesLeft = 1) { code ->
+                codes[id] = code
+                if (pending.decrementAndGet() == 0) {
+                    val eol = codes.filterValues { it == 410 }.keys.toSet()
+                    val noChat = codes.filterValues { it == 404 }.keys.toSet()
+                    mainHandler.post { onDone(eol, noChat) }
+                }
+            }
+        }
+    }
+
+    /** POST mínimo {"model": id} sin clave; reporta el código HTTP (o -1 si falló la red). */
+    private fun probeModelOnce(id: String, retriesLeft: Int, onCode: (Int) -> Unit) {
+        val body = "{\"model\":${JSONObject.quote(id)}}"
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(NIM_URL)
+            .post(body)
+            .build()
+        probeClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                onCode(-1)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val code = response.code
+                response.close()
+                if (code == 404 && retriesLeft > 0) {
+                    probeModelOnce(id, retriesLeft = 0, onCode)
+                } else {
+                    onCode(code)
                 }
             }
         })
@@ -971,7 +1072,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (uiModels.isEmpty()) {
+                if (uiModels.isEmpty() && !uiModelsLoading) {
                     Text(
                         "Todavía no cargaste la lista: tocá \"Cargar modelos\".",
                         style = MaterialTheme.typography.bodySmall,
